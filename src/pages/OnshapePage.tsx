@@ -125,7 +125,7 @@ export const OnshapePage: FC = () => {
         { key: 'documentUrl', label: 'Document URl', type: 'string' },
         { key: 'material', label: 'Material', type: 'string' },
         { key: 'mass', label: 'Mass', type: 'number' },
-        { key: 'price', label: 'Price', type: 'number' },
+        { key: 'price', label: 'Price ($)', type: 'number' },
         { key: 'manufacturingMethod', label: 'Manufacturing method', type: 'select', options: MFG_METHOD_OPTIONS },
         { key: 'producer', label: 'Producer', type: 'string' },
         { key: 'comments', label: 'Comments', type: 'string' },
