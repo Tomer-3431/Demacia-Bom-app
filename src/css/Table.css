@@ -77,7 +77,7 @@
 .table-td {
   border-bottom: 1px solid #334155;
   border-right: 1px solid #334155;
-  padding: 12px 16px;
+  padding: 0;
   color: #cbd5e1;
   white-space: nowrap;
   overflow: hidden;
@@ -131,6 +131,38 @@
 .table-td.drop-indicator-both {
   border-left: 3px solid #3b82f6 !important;
   border-right: 3px solid #3b82f6 !important;
+}
+
+.cell-input {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #cbd5e1;
+  font: inherit;
+  padding: 12px 16px;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+  border-radius: 0;
+}
+
+.cell-input:hover {
+  border-color: #475569;
+}
+
+.cell-input:focus {
+  background-color: #0f172a;
+  border-color: #3b82f6;
+}
+
+/* Remove native spinner arrows on numeric cell inputs for a cleaner look */
+.cell-input[type="number"]::-webkit-outer-spin-button,
+.cell-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cell-input[type="number"] {
+  -moz-appearance: textfield;
 }
 
 .context-menu {

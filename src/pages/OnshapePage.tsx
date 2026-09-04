@@ -18,6 +18,7 @@ type ColumnKey = keyof Omit<RowData, 'id'>;
 interface ColumnConfig {
     key: ColumnKey;
     label: string;
+    type: 'string' | 'number';
 }
 
 interface ContextMenuState {
@@ -25,6 +26,13 @@ interface ContextMenuState {
     x: number;
     y: number;
     columnIndex: number;
+}
+
+interface RowContextMenuState {
+    visible: boolean;
+    x: number;
+    y: number;
+    rowId: number | null;
 }
 
 const MASTER_DATA: Omit<RowData, 'id'>[] = [
@@ -65,12 +73,12 @@ export const OnshapePage: FC = () => {
     ]);
 
     const [columns, setColumns] = useState<ColumnConfig[]>([
-        { key: 'partId', label: 'Part ID' },
-        { key: 'description', label: 'Description' },
-        { key: 'manufacturingMethod', label: 'Manufacturing Method' },
-        { key: 'material', label: 'Material' },
-        { key: 'status', label: 'Status' },
-        { key: 'quantity', label: 'Qty' },
+        { key: 'partId', label: 'Part ID', type: 'string' },
+        { key: 'description', label: 'Description', type: 'string' },
+        { key: 'manufacturingMethod', label: 'Manufacturing Method', type: 'string' },
+        { key: 'material', label: 'Material', type: 'string' },
+        { key: 'status', label: 'Status', type: 'string' },
+        { key: 'quantity', label: 'Qty', type: 'number' },
     ]);
 
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
@@ -82,6 +90,13 @@ export const OnshapePage: FC = () => {
         x: 0,
         y: 0,
         columnIndex: -1
+    });
+
+    const [rowContextMenu, setRowContextMenu] = useState<RowContextMenuState>({
+        visible: false,
+        x: 0,
+        y: 0,
+        rowId: null
     });
 
     const handleRowCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,6 +169,36 @@ export const OnshapePage: FC = () => {
 
     const closeContextMenu = () => {
         setContextMenu(prev => ({ ...prev, visible: false }));
+        setRowContextMenu(prev => ({ ...prev, visible: false }));
+    };
+
+    const handleRowContextMenu = (e: React.MouseEvent, rowId: number) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setRowContextMenu({
+            visible: true,
+            x: e.clientX,
+            y: e.clientY,
+            rowId
+        });
+    };
+
+    const handleDeleteRowClick = () => {
+        if (rowContextMenu.rowId !== null) {
+            setData(prev => prev.filter(row => row.id !== rowContextMenu.rowId));
+        }
+        closeContextMenu();
+    };
+
+    const handleCellChange = (rowId: number, col: ColumnConfig, rawValue: string) => {
+        setData(prev => prev.map(row => {
+            if (row.id !== rowId) return row;
+            if (col.type === 'number') {
+                const num = rawValue === '' ? 0 : Number(rawValue);
+                return { ...row, [col.key]: isNaN(num) ? row[col.key] : num };
+            }
+            return { ...row, [col.key]: rawValue };
+        }));
     };
 
     const moveColumn = (fromIdx: number, toIdx: number) => {
@@ -182,7 +227,11 @@ export const OnshapePage: FC = () => {
         <div className="table-page-container" onClick={closeContextMenu}>
             <div className="table-header-section">
                 <h2>BOM Table</h2>
-                <span className="metadata-tag">Type: {wvmType} | ID: {wvmId || 'None'}</span>
+                <div className="metadata-tag">
+                    <div>wv: {worksapceOrVersion || 'None'}</div>
+                    <div>wvid: {workspaceOrVersionId || 'None'}</div>
+                    <div>mid: {microversionId || 'None'}</div>
+                </div>
             </div>
             
             <div className="table-controls">
@@ -230,13 +279,23 @@ export const OnshapePage: FC = () => {
                     </thead>
                     <tbody>
                         {data.map((row) => (
-                            <tr key={row.id} className="table-tr">
+                            <tr
+                                key={row.id}
+                                className="table-tr"
+                                onContextMenu={(e) => handleRowContextMenu(e, row.id)}
+                            >
                                 {columns.map((col, index) => (
                                     <td 
                                         key={col.key} 
                                         className={`table-td ${getDropIndicatorClass(index)}`}
                                     >
-                                        {row[col.key]}
+                                        <input
+                                            type={col.type === 'number' ? 'number' : 'text'}
+                                            value={row[col.key]}
+                                            onChange={(e) => handleCellChange(row.id, col, e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="cell-input"
+                                        />
                                     </td>
                                 ))}
                             </tr>
@@ -265,7 +324,18 @@ export const OnshapePage: FC = () => {
                     </button>
                 </div>
             )}
-            
+
+            {rowContextMenu.visible && (
+                <div 
+                    className="context-menu"
+                    style={{ top: rowContextMenu.y, left: rowContextMenu.x }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button onClick={handleDeleteRowClick}>
+                        Delete Row
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
