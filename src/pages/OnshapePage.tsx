@@ -84,33 +84,33 @@ export const OnshapePage: FC = () => {
     const microversionId = searchParams.get('mid');
 
     const [data, setData] = useState<RowData[]>([
-        { 
-            id: 1, type: 'subassembly', parentId: null, isExpanded: true, 
-            projectName: 'Project Alpha', manufacturingStatus: 'In construction', partId: 'ASM-5001', 
-            revision: 1, partName: 'Drive System Assembly', whereUsed: 'Main Assembly', quantity: 1, 
-            documentUrl: '', material: '', mass: 0, price: 0, 
-            manufacturingMethod: '', producer: '', comments: 'Core assembly tracking', group: 'Subassembly' 
+        {
+            id: 1, type: 'subassembly', parentId: null, isExpanded: true,
+            projectName: 'Project Alpha', manufacturingStatus: 'In construction', partId: 'ASM-5001',
+            revision: 1, partName: 'Drive System Assembly', whereUsed: 'Main Assembly', quantity: 1,
+            documentUrl: '', material: '', mass: 0, price: 0,
+            manufacturingMethod: '', producer: '', comments: 'Core assembly tracking', group: 'Subassembly'
         },
-        { 
-            id: 2, type: 'part', parentId: 1, isExpanded: false, 
-            projectName: 'Project Alpha', manufacturingStatus: 'In Production', partId: 'PN-10024', 
-            revision: 2, partName: 'Housing, Motor', whereUsed: 'ASM-5001', quantity: 1, 
-            documentUrl: 'http://docs/10024', material: 'ABS', mass: 1.2, price: 4.5, 
-            manufacturingMethod: 'Printed in 3D', producer: '', comments: '', group: 'Unique part' 
+        {
+            id: 2, type: 'part', parentId: 1, isExpanded: false,
+            projectName: 'Project Alpha', manufacturingStatus: 'In Production', partId: 'PN-10024',
+            revision: 2, partName: 'Housing, Motor', whereUsed: 'ASM-5001', quantity: 1,
+            documentUrl: 'http://docs/10024', material: 'ABS', mass: 1.2, price: 4.5,
+            manufacturingMethod: 'Printed in 3D', producer: '', comments: '', group: 'Unique part'
         },
-        { 
-            id: 3, type: 'part', parentId: 1, isExpanded: false, 
-            projectName: 'Project Alpha', manufacturingStatus: 'Completed', partId: 'PN-10025', 
-            revision: 1, partName: 'Shaft, Drive', whereUsed: 'ASM-5001', quantity: 1, 
-            documentUrl: 'http://docs/10025', material: 'Stainless Steel 304', mass: 2.5, price: 12.0, 
-            manufacturingMethod: 'Lathe', producer: '', comments: '', group: 'Standard part' 
+        {
+            id: 3, type: 'part', parentId: 1, isExpanded: false,
+            projectName: 'Project Alpha', manufacturingStatus: 'Completed', partId: 'PN-10025',
+            revision: 1, partName: 'Shaft, Drive', whereUsed: 'ASM-5001', quantity: 1,
+            documentUrl: 'http://docs/10025', material: 'Stainless Steel 304', mass: 2.5, price: 12.0,
+            manufacturingMethod: 'Lathe', producer: '', comments: '', group: 'Standard part'
         },
-        { 
-            id: 4, type: 'part', parentId: null, isExpanded: false, 
-            projectName: 'Project Alpha', manufacturingStatus: 'On Hold', partId: 'PN-10023', 
-            revision: 1, partName: 'Bracket, Mounting', whereUsed: 'Main Assembly', quantity: 2, 
-            documentUrl: '', material: 'Aluminum 6061-T6', mass: 0.8, price: 5.0, 
-            manufacturingMethod: 'Purchased externally', producer: 'McMaster-Carr', comments: '', group: 'Purchased part' 
+        {
+            id: 4, type: 'part', parentId: null, isExpanded: false,
+            projectName: 'Project Alpha', manufacturingStatus: 'On Hold', partId: 'PN-10023',
+            revision: 1, partName: 'Bracket, Mounting', whereUsed: 'Main Assembly', quantity: 2,
+            documentUrl: '', material: 'Aluminum 6061-T6', mass: 0.8, price: 5.0,
+            manufacturingMethod: 'Purchased externally', producer: 'McMaster-Carr', comments: '', group: 'Purchased part'
         },
     ]);
 
@@ -274,7 +274,7 @@ export const OnshapePage: FC = () => {
             documentUrl: '', material: '', mass: 0, price: 0, manufacturingMethod: '', producer: '',
             comments: '', group: type === 'subassembly' ? 'Subassembly' : 'Unique part'
         };
-        
+
         setData(prev => {
             let newData = [...prev, newRow];
             if (parentId !== null) newData = newData.map(row => row.id === parentId ? { ...row, isExpanded: true } : row);
@@ -318,7 +318,7 @@ export const OnshapePage: FC = () => {
         setData(prev => prev.map(row => {
             if (row.id !== rowId) return row;
             const updatedRow = { ...row };
-            
+
             if (col.type === 'number') {
                 const num = rawValue === '' ? 0 : Number(rawValue);
                 (updatedRow as any)[col.key] = isNaN(num) ? Number(row[col.key]) || 0 : num;
@@ -364,7 +364,7 @@ export const OnshapePage: FC = () => {
         if (rowContextMenu.rowId !== null) {
             const idsToDelete = new Set<number>();
             const queue = [rowContextMenu.rowId];
-            while(queue.length > 0) {
+            while (queue.length > 0) {
                 const currentId = queue.shift()!;
                 idsToDelete.add(currentId);
                 data.forEach(row => { if (row.parentId === currentId) queue.push(row.id); });
@@ -375,7 +375,7 @@ export const OnshapePage: FC = () => {
     };
 
     const getStatusClass = (status: string) => {
-        switch(status) {
+        switch (status) {
             case 'Not Started': return 'status-bg-gray';
             case 'In Design': return 'status-bg-purple';
             case 'In Review': return 'status-bg-blue';
@@ -426,7 +426,7 @@ export const OnshapePage: FC = () => {
                                         <span className="th-text">{col.label}</span>
                                         <div className="grid-drag-handle" draggable onMouseDown={() => setIsHandleDragging(true)} onMouseUp={() => setIsHandleDragging(false)}>⋮⋮</div>
                                     </div>
-                                    <div 
+                                    <div
                                         className="col-resize-handle"
                                         onMouseDown={(e) => handleResizeStart(e, col.key)}
                                         onDoubleClick={(e) => handleResizeDoubleClick(e, col.key, col.label)}
