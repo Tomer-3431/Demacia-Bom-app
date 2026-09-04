@@ -32,6 +32,30 @@
   color: #94a3b8;
 }
 
+/* --- New Button Styles --- */
+.table-controls button {
+  background-color: #3b82f6;
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.table-controls button:hover {
+  background-color: #2563eb;
+}
+
+.table-controls button:active {
+  background-color: #1d4ed8;
+  transform: translateY(1px);
+}
+/* ------------------------- */
+
 .row-count-field {
   background-color: #1e293b;
   border: 1px solid #334155;
@@ -198,4 +222,81 @@
 .context-menu button:disabled {
   color: #475569;
   cursor: not-allowed;
+}
+/* --- Hierarchy & Subassembly Styles --- */
+.td-content-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.expand-toggle {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 4px;
+  margin: 0 4px 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.expand-toggle:hover {
+  background-color: #334155;
+  color: #f1f5f9;
+}
+
+.expand-placeholder {
+  display: inline-block;
+  width: 28px; /* matching toggle width + margins */
+}
+
+.cell-disabled {
+  background-color: #1a2235;
+}
+
+.cell-input:disabled {
+  color: #475569;
+  cursor: not-allowed;
+}
+
+.cell-input:disabled:hover {
+  border-color: transparent;
+}
+
+/* --- Secondary Button (Subassembly) --- */
+.table-controls .btn-secondary {
+  background-color: #334155;
+  color: #f1f5f9;
+  border: 1px solid #475569;
+}
+
+.table-controls .btn-secondary:hover {
+  background-color: #475569;
+}
+
+.table-controls .btn-secondary:active {
+  background-color: #1e293b;
+}
+
+/* --- Context Menu Additions --- */
+.context-divider {
+  height: 1px;
+  background-color: #334155;
+  margin: 4px 0;
+}
+
+.context-menu .delete-btn {
+  color: #ef4444;
+}
+
+.context-menu .delete-btn:hover {
+  background-color: #ef4444;
+  color: #ffffff;
 }
