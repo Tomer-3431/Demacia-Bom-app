@@ -53,7 +53,7 @@ interface RowContextMenuState {
     rowId: number | null;
 }
 
-const STATUS_OPTIONS = [
+const PART_STATUS_OPTIONS = [
     'Not Started',
     'In Design',
     'In Review',
@@ -61,6 +61,15 @@ const STATUS_OPTIONS = [
     'Partially Completed',
     'Completed',
     'On Hold',
+    'Cancelled'
+];
+
+const ASSEMBLY_STATUS_OPTIONS = [
+    'Not Started',
+    'Parts being made',
+    'In construction',
+    'On Hold',
+    'Completed',
     'Cancelled'
 ];
 
@@ -77,10 +86,10 @@ export const OnshapePage: FC = () => {
     const [data, setData] = useState<RowData[]>([
         { 
             id: 1, type: 'subassembly', parentId: null, isExpanded: true, 
-            projectName: 'Project Alpha', manufacturingStatus: 'Not Started', partId: 'ASM-5001', 
-            revision: 1, partName: 'Drive System Assembly', whereUsed: 'Main Assy', quantity: 1, 
+            projectName: 'Project Alpha', manufacturingStatus: 'In construction', partId: 'ASM-5001', 
+            revision: 1, partName: 'Drive System Assembly', whereUsed: 'Main Assembly', quantity: 1, 
             documentUrl: '', material: '', mass: 0, price: 0, 
-            manufacturingMethod: '', producer: '', comments: 'Core assembly', group: 'Subassembly' 
+            manufacturingMethod: '', producer: '', comments: 'Core assembly tracking', group: 'Subassembly' 
         },
         { 
             id: 2, type: 'part', parentId: 1, isExpanded: false, 
@@ -99,7 +108,7 @@ export const OnshapePage: FC = () => {
         { 
             id: 4, type: 'part', parentId: null, isExpanded: false, 
             projectName: 'Project Alpha', manufacturingStatus: 'On Hold', partId: 'PN-10023', 
-            revision: 1, partName: 'Bracket, Mounting', whereUsed: 'Main Assy', quantity: 2, 
+            revision: 1, partName: 'Bracket, Mounting', whereUsed: 'Main Assembly', quantity: 2, 
             documentUrl: '', material: 'Aluminum 6061-T6', mass: 0.8, price: 5.0, 
             manufacturingMethod: 'Purchased externally', producer: 'McMaster-Carr', comments: '', group: 'Purchased part' 
         },
@@ -107,7 +116,7 @@ export const OnshapePage: FC = () => {
 
     const [columns, setColumns] = useState<ColumnConfig[]>([
         { key: 'projectName', label: 'Project Name', type: 'string' },
-        { key: 'manufacturingStatus', label: 'Manufacturing status', type: 'select', options: STATUS_OPTIONS },
+        { key: 'manufacturingStatus', label: 'Manufacturing status', type: 'select', options: PART_STATUS_OPTIONS },
         { key: 'partId', label: 'Part ID', type: 'string' },
         { key: 'revision', label: 'Revision', type: 'number' },
         { key: 'partName', label: 'Part Name', type: 'string' },
@@ -178,23 +187,23 @@ export const OnshapePage: FC = () => {
     const handleResizeDoubleClick = (e: React.MouseEvent, key: string, label: string) => {
         e.stopPropagation();
         
-        let maxLength = label.length;
+        let maxChars = label.length;
         visibleData.forEach(row => {
             const val = row[key as keyof RowData];
             const str = val !== null && val !== undefined ? String(val) : '';
-            const indent = visibleColumns[0].key === key ? row.level * 4 : 0;
-            maxLength = Math.max(maxLength, str.length + indent);
+            const indentChars = (visibleColumns[0].key === key ? row.level * 3 : 0);
+            maxChars = Math.max(maxChars, str.length + indentChars);
         });
 
-        const autoWidth = Math.max(60, (maxLength * 8) + 40);
-        setColumnWidths(prev => ({ ...prev, [key]: autoWidth }));
+        const tightFitWidth = Math.ceil((maxChars * 7.5) + 32);
+        setColumnWidths(prev => ({ ...prev, [key]: Math.max(70, tightFitWidth) }));
     };
 
     const handleAddRow = (type: 'part' | 'subassembly', parentId: number | null = null) => {
         const newId = data.length > 0 ? Math.max(...data.map(row => row.id)) + 1 : 1;
         const newRow: RowData = {
-            id: newId, type, parentId, isExpanded: true, projectName: '', manufacturingStatus: 'Not Started',
-            partId: '', revision: 1, partName: '', whereUsed: '', quantity: type === 'part' ? 0 : 1,
+            id: newId, type, parentId, isExpanded: true, projectName: '', manufacturingStatus: type === 'subassembly' ? 'Not Started' : 'Not Started',
+            partId: '', revision: 1, partName: '', whereUsed: parentId ? 'Subassembly' : 'Main Assembly', quantity: type === 'part' ? 0 : 1,
             documentUrl: '', material: '', mass: 0, price: 0, manufacturingMethod: '', producer: '',
             comments: '', group: type === 'subassembly' ? 'Subassembly' : 'Unique part'
         };
@@ -245,7 +254,6 @@ export const OnshapePage: FC = () => {
             
             const updatedRow = { ...row };
             
-            // Bypass strict typing safely
             if (col.type === 'number') {
                 const num = rawValue === '' ? 0 : Number(rawValue);
                 (updatedRow as any)[col.key] = isNaN(num) ? Number(row[col.key]) || 0 : num;
@@ -307,6 +315,8 @@ export const OnshapePage: FC = () => {
             case 'In Design': return 'status-bg-purple';
             case 'In Review': return 'status-bg-blue';
             case 'In Production': return 'status-bg-yellow';
+            case 'Parts being made': return 'status-bg-cyan';
+            case 'In construction': return 'status-bg-orange';
             case 'Partially Completed': return 'status-bg-light-green';
             case 'Completed': return 'status-bg-green';
             case 'On Hold': return 'status-bg-orange';
@@ -369,11 +379,11 @@ export const OnshapePage: FC = () => {
                                 <tr key={row.id} className="table-tr" onContextMenu={(e) => handleRowContextMenu(e, row.id)}>
                                     {visibleColumns.map((col, index) => {
                                         let isCellDisabled = false;
-                                        // explicitly declare the union type so React is happy with it in inputs/selects
                                         let displayValue: string | number = row[col.key] as string | number;
 
                                         if (isSubassembly) {
-                                            const allowedSubassemblyCols = ['partId', 'partName', 'quantity', 'group'];
+                                            // Subassemblies can now have comments along with Part ID, Part Name, Quantity, and Group
+                                            const allowedSubassemblyCols = ['partId', 'partName', 'quantity', 'group', 'manufacturingStatus', 'comments', 'projectName', 'whereUsed'];
                                             if (!allowedSubassemblyCols.includes(col.key)) isCellDisabled = true;
                                         }
 
@@ -385,6 +395,7 @@ export const OnshapePage: FC = () => {
 
                                         const isStatusCol = col.key === 'manufacturingStatus';
                                         const statusColorClass = isStatusCol ? getStatusClass(displayValue as string) : '';
+                                        const activeStatusOptions = isSubassembly ? ASSEMBLY_STATUS_OPTIONS : PART_STATUS_OPTIONS;
 
                                         return (
                                             <td key={col.key} className={`table-td ${getDropIndicatorClass(index)} ${isCellDisabled ? 'cell-disabled' : ''}`}>
@@ -403,7 +414,11 @@ export const OnshapePage: FC = () => {
                                                             disabled={isCellDisabled}
                                                         >
                                                             <option value="" disabled hidden>Select...</option>
-                                                            {col.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                            {isStatusCol ? (
+                                                                activeStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)
+                                                            ) : (
+                                                                col.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)
+                                                            )}
                                                             {col.key === 'group' && (isSubassembly || isPurchased) && (
                                                                 <option value={displayValue}>{displayValue}</option>
                                                             )}
