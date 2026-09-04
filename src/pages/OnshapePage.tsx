@@ -1,5 +1,6 @@
 import type { FC } from "react";
 import { useSearchParams } from "react-router-dom";
+import '../css/Table.css';
 
 export const OnshapePage: FC = () => {
     const [searchParams] = useSearchParams();
@@ -28,22 +29,17 @@ export const OnshapePage: FC = () => {
                 <h2>Onshape Page</h2>
             </div>
             <div>
-                <table>
+                <table className="custom-table">
+                    <thead>
+                        <tr>
+                            <th>test col 1</th>
+                            <th>test col 2</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <tr>
-                            <th>test title 1</th>
-                            <th>test title 2</th>
-                            <th>test title 3</th>
-                        </tr>
-                        <tr>
-                            <td>test name 1</td>
-                            <td>test subject 1</td>
-                            <td>test subject 2</td>
-                        </tr>
-                        <tr>
-                            <td>test name 2</td>
-                            <td>test subject 3</td>
-                            <td>test subject 4</td>
+                            <td>test subj 1</td>
+                            <td>test subj 2</td>
                         </tr>
                     </tbody>
                 </table>
