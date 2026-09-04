@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import '../css/Table.css';
 
@@ -140,6 +140,20 @@ export const OnshapePage: FC = () => {
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, columnIndex: -1 });
     const [rowContextMenu, setRowContextMenu] = useState<RowContextMenuState>({ visible: false, x: 0, y: 0, rowId: null });
 
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') closeContextMenu();
+        };
+        const handleScroll = () => closeContextMenu();
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('scroll', handleScroll, true);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('scroll', handleScroll, true);
+        };
+    }, []);
+
     const hasPurchasedParts = data.some(row => row.manufacturingMethod === 'Purchased externally');
     const visibleColumns = columns.filter(col => col.key !== 'producer' || hasPurchasedParts);
 
@@ -161,7 +175,61 @@ export const OnshapePage: FC = () => {
     const visibleData = getVisibleData();
     const activeContextMenuRow = data.find(r => r.id === rowContextMenu.rowId);
 
-    // --- Resizing Handlers ---
+    // Navigation helper that skips disabled cells
+    const focusNextAvailableCell = (rIdx: number, cIdx: number, dRow: number, dCol: number) => {
+        let targetRow = rIdx;
+        let targetCol = cIdx;
+
+        while (true) {
+            targetRow += dRow;
+            targetCol += dCol;
+
+            if (targetRow < 0 || targetRow >= visibleData.length) break;
+            if (targetCol < 0 || targetCol >= visibleColumns.length) break;
+
+            const cellElement = document.querySelector(`[data-row="${targetRow}"][data-col="${targetCol}"]`) as HTMLInputElement | HTMLSelectElement;
+            if (cellElement && !cellElement.disabled) {
+                cellElement.focus();
+                if (cellElement instanceof HTMLInputElement) {
+                    if (dCol === 1) cellElement.setSelectionRange(0, 0);
+                    else if (dCol === -1) cellElement.setSelectionRange(cellElement.value.length, cellElement.value.length);
+                    else cellElement.select();
+                }
+                break;
+            }
+        }
+    };
+
+    const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, colIndex: number) => {
+        const target = e.currentTarget as HTMLInputElement | HTMLSelectElement;
+        const isInput = target.tagName === 'INPUT';
+        const input = target as HTMLInputElement;
+
+        const isCtrl = e.ctrlKey;
+        const isUp = e.key === 'ArrowUp';
+        const isDown = e.key === 'ArrowDown';
+        const isLeft = e.key === 'ArrowLeft';
+        const isRight = e.key === 'ArrowRight';
+
+        if (isUp || isDown) {
+            e.preventDefault();
+            const dRow = isUp ? -1 : 1;
+            focusNextAvailableCell(rowIndex, colIndex, dRow, 0);
+        } else if (isLeft) {
+            if (isCtrl || (isInput && input.selectionStart === 0 && input.selectionEnd === 0)) {
+                e.preventDefault();
+                focusNextAvailableCell(rowIndex, colIndex, 0, -1);
+            }
+        } else if (isRight) {
+            if (isCtrl || (isInput && input.selectionStart === input.value.length && input.selectionEnd === input.value.length)) {
+                e.preventDefault();
+                focusNextAvailableCell(rowIndex, colIndex, 0, 1);
+            }
+        } else if (e.key === 'Enter') {
+            target.blur();
+        }
+    };
+
     const handleResizeStart = (e: React.MouseEvent, key: string) => {
         e.stopPropagation();
         e.preventDefault();
@@ -186,7 +254,6 @@ export const OnshapePage: FC = () => {
 
     const handleResizeDoubleClick = (e: React.MouseEvent, key: string, label: string) => {
         e.stopPropagation();
-        
         let maxChars = label.length;
         visibleData.forEach(row => {
             const val = row[key as keyof RowData];
@@ -202,7 +269,7 @@ export const OnshapePage: FC = () => {
     const handleAddRow = (type: 'part' | 'subassembly', parentId: number | null = null) => {
         const newId = data.length > 0 ? Math.max(...data.map(row => row.id)) + 1 : 1;
         const newRow: RowData = {
-            id: newId, type, parentId, isExpanded: true, projectName: '', manufacturingStatus: type === 'subassembly' ? 'Not Started' : 'Not Started',
+            id: newId, type, parentId, isExpanded: true, projectName: '', manufacturingStatus: 'Not Started',
             partId: '', revision: 1, partName: '', whereUsed: parentId ? 'Subassembly' : 'Main Assembly', quantity: type === 'part' ? 0 : 1,
             documentUrl: '', material: '', mass: 0, price: 0, manufacturingMethod: '', producer: '',
             comments: '', group: type === 'subassembly' ? 'Subassembly' : 'Unique part'
@@ -221,7 +288,6 @@ export const OnshapePage: FC = () => {
         setData(prev => prev.map(row => row.id === id ? { ...row, isExpanded: !row.isExpanded } : row));
     };
 
-    // --- Drag and Drop Logic ---
     const handleDragStart = (e: React.DragEvent, index: number) => {
         if (!isHandleDragging) { e.preventDefault(); return; }
         setDraggedIdx(index);
@@ -251,7 +317,6 @@ export const OnshapePage: FC = () => {
     const handleCellChange = (rowId: number, col: ColumnConfig, rawValue: string) => {
         setData(prev => prev.map(row => {
             if (row.id !== rowId) return row;
-            
             const updatedRow = { ...row };
             
             if (col.type === 'number') {
@@ -371,18 +436,17 @@ export const OnshapePage: FC = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {visibleData.map((row) => {
+                        {visibleData.map((row, rowIndex) => {
                             const isSubassembly = row.type === 'subassembly';
                             const isPurchased = row.manufacturingMethod === 'Purchased externally';
 
                             return (
                                 <tr key={row.id} className="table-tr" onContextMenu={(e) => handleRowContextMenu(e, row.id)}>
-                                    {visibleColumns.map((col, index) => {
+                                    {visibleColumns.map((col, colIndex) => {
                                         let isCellDisabled = false;
                                         let displayValue: string | number = row[col.key] as string | number;
 
                                         if (isSubassembly) {
-                                            // Subassemblies can now have comments along with Part ID, Part Name, Quantity, and Group
                                             const allowedSubassemblyCols = ['partId', 'partName', 'quantity', 'group', 'manufacturingStatus', 'comments', 'projectName', 'whereUsed'];
                                             if (!allowedSubassemblyCols.includes(col.key)) isCellDisabled = true;
                                         }
@@ -398,17 +462,20 @@ export const OnshapePage: FC = () => {
                                         const activeStatusOptions = isSubassembly ? ASSEMBLY_STATUS_OPTIONS : PART_STATUS_OPTIONS;
 
                                         return (
-                                            <td key={col.key} className={`table-td ${getDropIndicatorClass(index)} ${isCellDisabled ? 'cell-disabled' : ''}`}>
-                                                <div className="td-content-wrapper" style={index === 0 ? { paddingLeft: `${row.level * 24}px` } : {}}>
-                                                    {index === 0 && isSubassembly && (
+                                            <td key={col.key} className={`table-td ${getDropIndicatorClass(colIndex)} ${isCellDisabled ? 'cell-disabled' : ''}`}>
+                                                <div className="td-content-wrapper" style={colIndex === 0 ? { paddingLeft: `${row.level * 24}px` } : {}}>
+                                                    {colIndex === 0 && isSubassembly && (
                                                         <button className="expand-toggle" onClick={(e) => toggleExpand(row.id, e)}>{row.isExpanded ? '▼' : '▶'}</button>
                                                     )}
-                                                    {index === 0 && !isSubassembly && <span className="expand-placeholder"></span>}
+                                                    {colIndex === 0 && !isSubassembly && <span className="expand-placeholder"></span>}
 
                                                     {col.type === 'select' ? (
                                                         <select
+                                                            data-row={rowIndex}
+                                                            data-col={colIndex}
                                                             value={displayValue}
                                                             onChange={(e) => handleCellChange(row.id, col, e.target.value)}
+                                                            onKeyDown={(e) => handleCellKeyDown(e, rowIndex, colIndex)}
                                                             onClick={(e) => e.stopPropagation()}
                                                             className={`cell-input cell-select ${statusColorClass}`}
                                                             disabled={isCellDisabled}
@@ -425,9 +492,13 @@ export const OnshapePage: FC = () => {
                                                         </select>
                                                     ) : (
                                                         <input
+                                                            data-row={rowIndex}
+                                                            data-col={colIndex}
                                                             type={col.type === 'number' ? 'number' : 'text'}
                                                             value={displayValue}
                                                             onChange={(e) => handleCellChange(row.id, col, e.target.value)}
+                                                            onFocus={(e) => e.target.select()}
+                                                            onKeyDown={(e) => handleCellKeyDown(e, rowIndex, colIndex)}
                                                             onClick={(e) => e.stopPropagation()}
                                                             className="cell-input"
                                                             disabled={isCellDisabled}
@@ -440,6 +511,13 @@ export const OnshapePage: FC = () => {
                                 </tr>
                             );
                         })}
+                        {visibleData.length === 0 && (
+                            <tr>
+                                <td colSpan={visibleColumns.length} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                                    No items in BOM. Add a part or subassembly to begin.
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
