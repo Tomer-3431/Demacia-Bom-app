@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import '../css/Table.css';
 
@@ -15,11 +15,11 @@ interface RowData {
     revision: number;
     partName: string;
     whereUsed: string;
-    quantity: number;
+    quantity: number | string;
     documentUrl: string;
     material: string;
-    mass: number;
-    price: number;
+    mass: number | string;
+    price: number | string;
     manufacturingMethod: string;
     producer: string;
     comments: string;
@@ -76,6 +76,9 @@ const ASSEMBLY_STATUS_OPTIONS = [
 const MFG_METHOD_OPTIONS = ['Manually made', 'Printed in 3D', 'CNC', 'Lathe', 'Externally made', 'Milled', 'Purchased externally'];
 const GROUP_OPTIONS = ['Unique part', 'Standard part'];
 
+const MIN_LAST_COL_WIDTH = 120;
+const DEFAULT_COL_WIDTH = 120;
+
 export const OnshapePage: FC = () => {
     const [searchParams] = useSearchParams();
 
@@ -84,33 +87,33 @@ export const OnshapePage: FC = () => {
     const microversionId = searchParams.get('mid');
 
     const [data, setData] = useState<RowData[]>([
-        {
-            id: 1, type: 'subassembly', parentId: null, isExpanded: true,
-            projectName: 'Project Alpha', manufacturingStatus: 'In construction', partId: 'ASM-5001',
-            revision: 1, partName: 'Drive System Assembly', whereUsed: 'Main Assembly', quantity: 1,
-            documentUrl: '', material: '', mass: 0, price: 0,
-            manufacturingMethod: '', producer: '', comments: 'Core assembly tracking', group: 'Subassembly'
+        { 
+            id: 1, type: 'subassembly', parentId: null, isExpanded: true, 
+            projectName: 'Project Alpha', manufacturingStatus: 'In construction', partId: 'ASM-5001', 
+            revision: 1, partName: 'Drive System Assembly', whereUsed: 'Main Assembly', quantity: 1, 
+            documentUrl: '', material: '', mass: 0, price: 0, 
+            manufacturingMethod: '', producer: '', comments: 'Core assembly tracking', group: 'Subassembly' 
         },
-        {
-            id: 2, type: 'part', parentId: 1, isExpanded: false,
-            projectName: 'Project Alpha', manufacturingStatus: 'In Production', partId: 'PN-10024',
-            revision: 2, partName: 'Housing, Motor', whereUsed: 'ASM-5001', quantity: 1,
-            documentUrl: 'http://docs/10024', material: 'ABS', mass: 1.2, price: 4.5,
-            manufacturingMethod: 'Printed in 3D', producer: '', comments: '', group: 'Unique part'
+        { 
+            id: 2, type: 'part', parentId: 1, isExpanded: false, 
+            projectName: 'Project Alpha', manufacturingStatus: 'In Production', partId: 'PN-10024', 
+            revision: 2, partName: 'Housing, Motor', whereUsed: 'ASM-5001', quantity: 1, 
+            documentUrl: 'http://docs/10024', material: 'ABS', mass: 1.2, price: 4.5, 
+            manufacturingMethod: 'Printed in 3D', producer: '', comments: '', group: 'Unique part' 
         },
-        {
-            id: 3, type: 'part', parentId: 1, isExpanded: false,
-            projectName: 'Project Alpha', manufacturingStatus: 'Completed', partId: 'PN-10025',
-            revision: 1, partName: 'Shaft, Drive', whereUsed: 'ASM-5001', quantity: 1,
-            documentUrl: 'http://docs/10025', material: 'Stainless Steel 304', mass: 2.5, price: 12.0,
-            manufacturingMethod: 'Lathe', producer: '', comments: '', group: 'Standard part'
+        { 
+            id: 3, type: 'part', parentId: 1, isExpanded: false, 
+            projectName: 'Project Alpha', manufacturingStatus: 'Completed', partId: 'PN-10025', 
+            revision: 1, partName: 'Shaft, Drive', whereUsed: 'ASM-5001', quantity: 1, 
+            documentUrl: 'http://docs/10025', material: 'Stainless Steel 304', mass: 2.5, price: 12.0, 
+            manufacturingMethod: 'Lathe', producer: '', comments: '', group: 'Standard part' 
         },
-        {
-            id: 4, type: 'part', parentId: null, isExpanded: false,
-            projectName: 'Project Alpha', manufacturingStatus: 'On Hold', partId: 'PN-10023',
-            revision: 1, partName: 'Bracket, Mounting', whereUsed: 'Main Assembly', quantity: 2,
-            documentUrl: '', material: 'Aluminum 6061-T6', mass: 0.8, price: 5.0,
-            manufacturingMethod: 'Purchased externally', producer: 'McMaster-Carr', comments: '', group: 'Purchased part'
+        { 
+            id: 4, type: 'part', parentId: null, isExpanded: false, 
+            projectName: 'Project Alpha', manufacturingStatus: 'On Hold', partId: 'PN-10023', 
+            revision: 1, partName: 'Bracket, Mounting', whereUsed: 'Main Assembly', quantity: 2, 
+            documentUrl: '', material: 'Aluminum 6061-T6', mass: 0.8, price: 5.0, 
+            manufacturingMethod: 'Purchased externally', producer: 'McMaster-Carr', comments: '', group: 'Purchased part' 
         },
     ]);
 
@@ -140,6 +143,12 @@ export const OnshapePage: FC = () => {
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, columnIndex: -1 });
     const [rowContextMenu, setRowContextMenu] = useState<RowContextMenuState>({ visible: false, x: 0, y: 0, rowId: null });
 
+    // Auto-fill state for the last column: when the user hasn't manually
+    // resized the last column, it stretches to consume any leftover space
+    // in the table wrapper instead of leaving a dead gap.
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const [autoLastColWidth, setAutoLastColWidth] = useState<number | null>(null);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') closeContextMenu();
@@ -156,6 +165,43 @@ export const OnshapePage: FC = () => {
 
     const hasPurchasedParts = data.some(row => row.manufacturingMethod === 'Purchased externally');
     const visibleColumns = columns.filter(col => col.key !== 'producer' || hasPurchasedParts);
+
+    // Recompute the auto-fill width for the last column whenever the
+    // wrapper resizes, the visible column set changes, or any column
+    // width (manual or otherwise) changes.
+    useEffect(() => {
+        const wrapper = wrapperRef.current;
+        if (!wrapper) return;
+
+        const lastCol = visibleColumns[visibleColumns.length - 1];
+        if (!lastCol) {
+            setAutoLastColWidth(null);
+            return;
+        }
+
+        const recompute = () => {
+            // If the user has manually resized this specific column
+            // (it has an explicit entry in columnWidths), respect that
+            // and stop auto-filling it.
+            if (Object.prototype.hasOwnProperty.call(columnWidths, lastCol.key)) {
+                setAutoLastColWidth(null);
+                return;
+            }
+
+            const othersWidth = visibleColumns
+                .slice(0, -1)
+                .reduce((sum, c) => sum + (columnWidths[c.key] || DEFAULT_COL_WIDTH), 0);
+
+            const available = wrapper.clientWidth - othersWidth;
+            setAutoLastColWidth(Math.max(MIN_LAST_COL_WIDTH, available));
+        };
+
+        recompute();
+
+        const ro = new ResizeObserver(recompute);
+        ro.observe(wrapper);
+        return () => ro.disconnect();
+    }, [visibleColumns, columnWidths]);
 
     const getVisibleData = (): RenderRow[] => {
         const result: RenderRow[] = [];
@@ -175,7 +221,6 @@ export const OnshapePage: FC = () => {
     const visibleData = getVisibleData();
     const activeContextMenuRow = data.find(r => r.id === rowContextMenu.rowId);
 
-    // Navigation helper that skips disabled cells
     const focusNextAvailableCell = (rIdx: number, cIdx: number, dRow: number, dCol: number) => {
         let targetRow = rIdx;
         let targetCol = cIdx;
@@ -230,26 +275,99 @@ export const OnshapePage: FC = () => {
         }
     };
 
-    const handleResizeStart = (e: React.MouseEvent, key: string) => {
+   const handleResizeStart = (e: React.PointerEvent, key: string) => {
         e.stopPropagation();
         e.preventDefault();
 
         const th = (e.target as HTMLElement).closest('th');
-        const startWidth = th ? th.getBoundingClientRect().width : 150;
+        if (!th) return;
+
+        const table = th.closest('table');
+        const colIndex = Array.from(th.parentNode?.children || []).indexOf(th);
+        const colElement = table?.querySelector('colgroup')?.children[colIndex] as HTMLElement;
+
+        const initialWidth = colElement ? colElement.getBoundingClientRect().width : th.getBoundingClientRect().width;
         const startX = e.clientX;
+        const wrapper = th.closest('.table-wrapper') as HTMLElement;
+        
+        let currentWidth = initialWidth;
+        let latestClientX = startX;
+        let isActive = true;
+        let rafId: number | null = null;
 
-        const onMouseMove = (moveEvent: MouseEvent) => {
-            const newWidth = Math.max(60, startWidth + (moveEvent.clientX - startX));
-            setColumnWidths(prev => ({ ...prev, [key]: newWidth }));
+        const EDGE_ZONE = 40; // px from screen edge that triggers auto-growth
+        const MAX_EDGE_SPEED = 40; // px of column growth per frame at the very edge
+
+        const targetElement = e.target as HTMLElement;
+        targetElement.setPointerCapture(e.pointerId);
+
+        const applyWidth = (w: number) => {
+            currentWidth = Math.max(60, w);
+            if (colElement) colElement.style.width = `${currentWidth}px`;
+            if (table) table.style.width = 'max-content';
         };
 
-        const onMouseUp = () => {
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
+        // Persistent per-frame loop: runs continuously from pointerdown to
+        // pointerup regardless of whether new pointermove events arrive.
+        // This lets holding the cursor at the screen edge keep growing the
+        // column indefinitely, since the loop doesn't depend on the cursor
+        // actually moving any further.
+        const tick = () => {
+            if (!isActive) return;
+
+            const rawDelta = latestClientX - startX;
+            const absDelta = Math.abs(rawDelta);
+            const isShrinking = rawDelta < 0;
+
+            const speedMultiplier = 1 + (absDelta * 0.015);
+            const scaledDelta = rawDelta * speedMultiplier;
+
+            applyWidth(initialWidth + scaledDelta);
+
+            // Infinite expansion while the cursor rests near/at the right
+            // edge of the screen: grow proportionally to how deep into the
+            // edge zone the cursor is, every frame, with no upper bound.
+            const distanceIntoRightEdge = latestClientX - (window.innerWidth - EDGE_ZONE);
+            if (distanceIntoRightEdge > 0) {
+                const growth = Math.min(MAX_EDGE_SPEED, (distanceIntoRightEdge / EDGE_ZONE) * MAX_EDGE_SPEED);
+                applyWidth(currentWidth + growth);
+                if (wrapper) wrapper.scrollLeft += growth * 1.5;
+            } else if (latestClientX <= EDGE_ZONE) {
+                const distanceIntoLeftEdge = EDGE_ZONE - latestClientX;
+                const shrink = Math.min(MAX_EDGE_SPEED, (distanceIntoLeftEdge / EDGE_ZONE) * MAX_EDGE_SPEED);
+                applyWidth(currentWidth - shrink);
+            }
+
+            // Keep the wrapper scrolled to follow growth even away from the
+            // hard screen edge, once the cursor nears the wrapper's own edge.
+            if (wrapper && !isShrinking) {
+                const wrapperRect = wrapper.getBoundingClientRect();
+                if (latestClientX > wrapperRect.right - 100) {
+                    const scrollPush = Math.max(5, (latestClientX - (wrapperRect.right - 100)) * 0.8);
+                    wrapper.scrollLeft += scrollPush;
+                }
+            }
+
+            rafId = requestAnimationFrame(tick);
         };
 
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
+        const onPointerMove = (moveEvent: PointerEvent) => {
+            latestClientX = moveEvent.clientX;
+        };
+
+        const onPointerUp = (upEvent: PointerEvent) => {
+            isActive = false;
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            targetElement.releasePointerCapture(upEvent.pointerId);
+            targetElement.removeEventListener('pointermove', onPointerMove);
+            targetElement.removeEventListener('pointerup', onPointerUp);
+
+            setColumnWidths(prev => ({ ...prev, [key]: currentWidth }));
+        };
+
+        targetElement.addEventListener('pointermove', onPointerMove);
+        targetElement.addEventListener('pointerup', onPointerUp);
+        rafId = requestAnimationFrame(tick);
     };
 
     const handleResizeDoubleClick = (e: React.MouseEvent, key: string, label: string) => {
@@ -274,7 +392,7 @@ export const OnshapePage: FC = () => {
             documentUrl: '', material: '', mass: 0, price: 0, manufacturingMethod: '', producer: '',
             comments: '', group: type === 'subassembly' ? 'Subassembly' : 'Unique part'
         };
-
+        
         setData(prev => {
             let newData = [...prev, newRow];
             if (parentId !== null) newData = newData.map(row => row.id === parentId ? { ...row, isExpanded: true } : row);
@@ -318,10 +436,9 @@ export const OnshapePage: FC = () => {
         setData(prev => prev.map(row => {
             if (row.id !== rowId) return row;
             const updatedRow = { ...row };
-
+            
             if (col.type === 'number') {
-                const num = rawValue === '' ? 0 : Number(rawValue);
-                (updatedRow as any)[col.key] = isNaN(num) ? Number(row[col.key]) || 0 : num;
+                (updatedRow as any)[col.key] = rawValue;
             } else {
                 (updatedRow as any)[col.key] = rawValue;
             }
@@ -336,6 +453,33 @@ export const OnshapePage: FC = () => {
             }
             return updatedRow;
         }));
+    };
+
+    const handleNumberBlur = (rowId: number, col: ColumnConfig, rawValue: string | number) => {
+        const strVal = String(rawValue).trim();
+        if (strVal === '' || strVal === '.') {
+            handleCellChange(rowId, col, '0');
+            return;
+        }
+
+        let processed = strVal;
+        if (col.key === 'quantity' || col.key === 'revision') {
+            const intVal = parseInt(processed, 10);
+            const finalVal = isNaN(intVal) ? 0 : Math.max(0, intVal);
+            handleCellChange(rowId, col, String(finalVal));
+            return;
+        }
+
+        if (processed.startsWith('.')) {
+            processed = '0' + processed;
+        }
+        if (processed.endsWith('.')) {
+            processed = processed.slice(0, -1);
+        }
+
+        const num = Number(processed);
+        const finalVal = isNaN(num) ? 0 : num;
+        handleCellChange(rowId, col, String(finalVal));
     };
 
     const moveColumn = (fromIdx: number, toIdx: number) => {
@@ -364,7 +508,7 @@ export const OnshapePage: FC = () => {
         if (rowContextMenu.rowId !== null) {
             const idsToDelete = new Set<number>();
             const queue = [rowContextMenu.rowId];
-            while (queue.length > 0) {
+            while(queue.length > 0) {
                 const currentId = queue.shift()!;
                 idsToDelete.add(currentId);
                 data.forEach(row => { if (row.parentId === currentId) queue.push(row.id); });
@@ -375,7 +519,7 @@ export const OnshapePage: FC = () => {
     };
 
     const getStatusClass = (status: string) => {
-        switch (status) {
+        switch(status) {
             case 'Not Started': return 'status-bg-gray';
             case 'In Design': return 'status-bg-purple';
             case 'In Review': return 'status-bg-blue';
@@ -406,14 +550,22 @@ export const OnshapePage: FC = () => {
                 <button onClick={() => handleAddRow('subassembly')} className="btn-secondary">+ Add Subassembly</button>
             </div>
 
-            <div className="table-wrapper">
+            <div className="table-wrapper" ref={wrapperRef}>
                 <table className="custom-table">
+                    <colgroup>
+                        {visibleColumns.map((col, idx) => {
+                            const isLast = idx === visibleColumns.length - 1;
+                            const width =
+                                columnWidths[col.key] ??
+                                (isLast && autoLastColWidth !== null ? autoLastColWidth : DEFAULT_COL_WIDTH);
+                            return <col key={col.key} style={{ width }} />;
+                        })}
+                    </colgroup>
                     <thead>
                         <tr>
                             {visibleColumns.map((col, index) => (
                                 <th
                                     key={col.key}
-                                    style={{ width: columnWidths[col.key], minWidth: columnWidths[col.key] || 120 }}
                                     draggable={isHandleDragging}
                                     onDragStart={(e) => handleDragStart(e, index)}
                                     onDragOver={(e) => handleDragOver(e, index)}
@@ -426,9 +578,9 @@ export const OnshapePage: FC = () => {
                                         <span className="th-text">{col.label}</span>
                                         <div className="grid-drag-handle" draggable onMouseDown={() => setIsHandleDragging(true)} onMouseUp={() => setIsHandleDragging(false)}>⋮⋮</div>
                                     </div>
-                                    <div
+                                    <div 
                                         className="col-resize-handle"
-                                        onMouseDown={(e) => handleResizeStart(e, col.key)}
+                                        onPointerDown={(e) => handleResizeStart(e, col.key)}
                                         onDoubleClick={(e) => handleResizeDoubleClick(e, col.key, col.label)}
                                     />
                                 </th>
@@ -490,11 +642,32 @@ export const OnshapePage: FC = () => {
                                                                 <option value={displayValue}>{displayValue}</option>
                                                             )}
                                                         </select>
+                                                    ) : col.type === 'number' ? (
+                                                        <input
+                                                            data-row={rowIndex}
+                                                            data-col={colIndex}
+                                                            type="text"
+                                                            inputMode={col.key === 'quantity' || col.key === 'revision' ? 'numeric' : 'decimal'}
+                                                            value={displayValue}
+                                                            onChange={(e) => handleCellChange(row.id, col, e.target.value)}
+                                                            onBlur={(e) => handleNumberBlur(row.id, col, e.target.value)}
+                                                            onFocus={(e) => e.target.select()}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.currentTarget.blur();
+                                                                } else {
+                                                                    handleCellKeyDown(e, rowIndex, colIndex);
+                                                                }
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="cell-input"
+                                                            disabled={isCellDisabled}
+                                                        />
                                                     ) : (
                                                         <input
                                                             data-row={rowIndex}
                                                             data-col={colIndex}
-                                                            type={col.type === 'number' ? 'number' : 'text'}
+                                                            type="text"
                                                             value={displayValue}
                                                             onChange={(e) => handleCellChange(row.id, col, e.target.value)}
                                                             onFocus={(e) => e.target.select()}
