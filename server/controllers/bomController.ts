@@ -46,7 +46,7 @@ export async function getAllBoms(
     next: NextFunction,
 ) {
     try {
-        const boms = await Bom.find().sort({ _id: 1 });
+        const boms = await Bom.find().sort({ id: 1 });
         return res.status(200).json(boms);
     } catch (err) {
         return next(err);
@@ -60,7 +60,7 @@ export async function getBomByID(
 ) {
     try {
         const id = req.params.id;
-        const bom = Bom.findOne({ _id: id });
+        const bom = Bom.findOne({ id: id });
         if (!bom)
             return res.status(404).json({ message: `Bom ${id} not found` });
         return res.status(200).json(bom);
@@ -76,10 +76,10 @@ export async function upsertBomByID(
 ) {
     try {
         const id = req.params.id;
-        const existing = await Bom.findOne({ _id: id });
+        const existing = await Bom.findOne({ id: id });
         const bom = await Bom.findOneAndUpdate(
-            { _id: id },
-            { ...req.body, _id: id },
+            { id: id },
+            { ...req.body, id: id },
             {
                 new: true,
                 upsert: true,
@@ -101,7 +101,7 @@ export async function deleteBomByID(
 ) {
     try {
         const id = req.params.id;
-        const deleted = await Bom.findOneAndDelete({ _id: id });
+        const deleted = await Bom.findOneAndDelete({ id: id });
         
         if (!deleted)
             return res.status(404).json({ message: `Bom ${id} not found`});

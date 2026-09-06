@@ -39,7 +39,7 @@ export async function getAllParts(
   next: NextFunction,
 ) {
   try {
-    const parts = await Part.find().sort({ _id: 1 });
+    const parts = await Part.find().sort({ id: 1 });
     return res.status(200).json(parts);
   } catch (err) {
     return next(err);
@@ -53,7 +53,7 @@ export async function getPartByID(
 ) {
   try {
     const id = req.params.id;
-    const part = await Part.findOne({ _id: id });
+    const part = await Part.findOne({ id: id });
     if (!part)
       return res
         .status(404)
@@ -71,10 +71,10 @@ export async function upsertPartByID(
 ) {
   try {
     const id = req.params.id;
-    const existing = await Part.findOne({ _id: id });
+    const existing = await Part.findOne({ id: id });
     const part = await Part.findOneAndUpdate(
-      { _id: id },
-      { ...req.body, _id: id },
+      { id: id },
+      { ...req.body, id: id },
       {
         new: true,
         upsert: true,
@@ -96,7 +96,7 @@ export async function deletePartByID(
 ) {
   try {
     const id = req.params.id;
-    const deleted = await Part.findOneAndDelete({ _id: id });
+    const deleted = await Part.findOneAndDelete({ id: id });
 
     if (!deleted)
       return res.status(404).json({ message: `Part ${id} not found` });
