@@ -13,7 +13,7 @@ const onshapeIDSchema = new mongoose.Schema(
 
 const partSchema = new mongoose.Schema(
   {
-    _id: { type: String, required: true, unique: true, index: true },
+    id: { type: String, required: true, unique: true, index: true },
 
     name: { type: String },
     catalogNumber: { type: String },
@@ -33,14 +33,7 @@ const partSchema = new mongoose.Schema(
     comments: { type: String },
     onshapeID: { type: onshapeIDSchema, required: false },
   },
-  { timestamps: true },
-);
-
-partSchema.index(
-  {
-    _id: 1,
-  },
-  { unique: true, sparse: true },
+  { _id: false, timestamps: true },
 );
 
 const Part = mongoose.model('Part', partSchema);

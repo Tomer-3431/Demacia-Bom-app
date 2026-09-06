@@ -16,7 +16,7 @@ const subPartSchema = new mongoose.Schema(
 
 const workOrderSchema = new mongoose.Schema(
   {
-    _id: { type: String, required: true, unique: true, index: true },
+    id: { type: String, required: true, unique: true, index: true },
 
     name: { type: String },
     bomID: { type: String },
@@ -29,16 +29,6 @@ const workOrderSchema = new mongoose.Schema(
     workOrderCreated: { type: Date },
   },
   { timestamps: true },
-);
-
-workOrderSchema.index(
-  {
-    _id: 1,
-  },
-  {
-    unique: true,
-    sparse: true,
-  },
 );
 
 const WorkOrder = mongoose.model('Work Order', workOrderSchema);

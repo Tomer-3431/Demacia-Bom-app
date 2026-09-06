@@ -31,7 +31,7 @@ const subAseemblySchema = new mongoose.Schema(
 
 const bomSchema = new mongoose.Schema(
   {
-    _id: { type: String, required: true, unique: true, index: true },
+    id: { type: String, required: true, unique: true, index: true },
 
     name: { type: String },
     catalogNumber: { type: String },
@@ -47,17 +47,7 @@ const bomSchema = new mongoose.Schema(
     comments: { type: String },
     onshapeID: { type: onshapeIDSchema, required: false },
   },
-  { timestamps: true },
-);
-
-bomSchema.index(
-  {
-    _id: 1,
-  },
-  {
-    unique: true,
-    sparse: true,
-  },
+  { _id: false, timestamps: true },
 );
 
 const Bom = mongoose.model('Bom', bomSchema);
