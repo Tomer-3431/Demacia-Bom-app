@@ -131,14 +131,42 @@ const CONTEXT_KEYS = [
 ] as const;
 
 /**
- * Parses the Onshape context out of a query string (defaults to
- * `window.location.search`). Handles both styles Onshape uses:
+ * Resolves the query string Onshape actually appended, regardless of whether
+ * the app uses a plain URL (`?documentId=...`) or a hash router
+ * (`#/route?documentId=...`, e.g. React Router's `HashRouter` or a manual
+ * `#/Onshape?...` scheme).
+ *
+ * Browsers only populate `location.search` with what appears *before* the
+ * `#`. A hash router puts its own `?query` *inside* `location.hash`, so on
+ * a hash-routed app `location.search` is empty even though Onshape's params
+ * are sitting right there in the URL - this pulls them out of whichever
+ * place they actually are.
+ */
+function resolveOnshapeSearchString(): string {
+  if (typeof window === 'undefined') return '';
+
+  const { search, hash } = window.location;
+
+  // Plain (non-hash-router) case: params are already in the real search string.
+  if (search && search !== '?') return search;
+
+  // Hash-router case: hash looks like "#/Onshape?documentId=...&...".
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex !== -1) return hash.slice(queryIndex);
+
+  return search;
+}
+
+/**
+ * Parses the Onshape context out of a query string (defaults to whatever
+ * `resolveOnshapeSearchString()` finds - handling hash-routed apps
+ * automatically). Handles both styles Onshape uses:
  *  - Element Tab style: `workspaceId` / `versionId` passed directly.
  *  - Other locations (Element Right Panel, context menus, ...): a combined
  *    `workspaceOrVersion` ('w' | 'v') + `workspaceOrVersionId` pair.
  */
 export function parseOnshapeContext(
-  search: string = typeof window !== 'undefined' ? window.location.search : ''
+  search: string = resolveOnshapeSearchString()
 ): OnshapeContext {
   const params = new URLSearchParams(search);
   const context = {} as OnshapeContext;
@@ -637,7 +665,8 @@ export function createOnshapeClient(context: OnshapeContext): OnshapeClient {
  * 4. React hooks
  * ========================================================================== */
 
-/** Parses `window.location.search` into an `OnshapeContext` once per mount. */
+/** Parses the current URL (search string or hash-router query) into an
+ *  `OnshapeContext` once per mount. */
 export function useOnshapeContext(): OnshapeContext {
   return useMemo(() => parseOnshapeContext(), []);
 }
@@ -769,7 +798,7 @@ export interface OnshapeOAuthCallbackParams {
  *  redirects back to your `redirectUri`. Send `code` to your backend to
  *  exchange it for an access/refresh token pair. */
 export function parseOnshapeOAuthCallback(
-  search: string = typeof window !== 'undefined' ? window.location.search : ''
+  search: string = resolveOnshapeSearchString()
 ): OnshapeOAuthCallbackParams {
   const params = new URLSearchParams(search);
   return {
@@ -787,7 +816,7 @@ export function parseOnshapeOAuthCallback(
  * Returns the URI if present.
  */
 export function getRedirectOnshapeUri(
-  search: string = typeof window !== 'undefined' ? window.location.search : ''
+  search: string = resolveOnshapeSearchString()
 ): string | null {
   return new URLSearchParams(search).get('redirectOnshapeUri');
 }
