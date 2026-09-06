@@ -2,6 +2,7 @@ import express, { Request, Response, ErrorRequestHandler, Express, NextFunction 
 import cors from "cors";
 import apiRoutes from './routes';
 import { checkAuth } from "./controllers/healthController";
+import morgan from "morgan";
 
 const app: Express = express();
 
@@ -21,6 +22,7 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
+app.use(morgan("dev"));
 
 app.use('/api', checkAuth, apiRoutes)
 
