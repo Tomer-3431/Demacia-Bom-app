@@ -53,12 +53,6 @@ interface RowContextMenuState {
     rowId: number | null;
 }
 
-// Raw shape returned by the server's /api/parts endpoint — a nested tree,
-// since a subassembly can contain parts and subassemblies recursively.
-// NOTE: field names here are a best guess (id, type, children, etc.) —
-// not yet confirmed against the real server response. If parts render
-// blank or the shape is different, check the Network tab response for
-// /api/parts and adjust this interface + flattenBomTree to match.
 interface RawBomNode {
     id: string | number;
     type: 'part' | 'subassembly';
@@ -109,25 +103,23 @@ const DEFAULT_COL_WIDTH = 120;
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5050';
 
-// Flattens the nested BOM tree from the server into the flat RowData[]
-// the table's expand/collapse + parentId logic expects. Assigns fresh
-// sequential numeric ids (since server ids may be strings/Onshape IDs)
-// while wiring up parentId links so getVisibleData()'s tree walk works.
 const flattenBomTree = (
     nodes: RawBomNode[],
     parentId: number | null,
     counterRef: { current: number }
 ): RowData[] => {
+    console.log(`[BOM Flatten] Processing ${nodes.length} nodes at parentId: ${parentId}`);
     const result: RowData[] = [];
     for (const node of nodes) {
         const id = counterRef.current++;
+        console.log(`[BOM Flatten] -> Mapping node raw ID [${node.id}] to internal ID [${id}], type: ${node.type}`);
         result.push({
             id,
             type: node.type,
             parentId,
             isExpanded: true,
             projectName: node.projectName ?? '',
-            manufacturingStatus: node.manufacturingStatus ?? (node.type === 'subassembly' ? 'Not Started' : 'Not Started'),
+            manufacturingStatus: node.manufacturingStatus ?? 'Not Started',
             partId: node.partId ?? '',
             revision: node.revision ?? 1,
             partName: node.partName ?? node.name ?? '',
@@ -143,6 +135,7 @@ const flattenBomTree = (
             group: node.group ?? (node.type === 'subassembly' ? 'Subassembly' : 'Unique part'),
         });
         if (node.children && node.children.length > 0) {
+            console.log(`[BOM Flatten] Found ${node.children.length} children for node internal ID [${id}]`);
             result.push(...flattenBomTree(node.children, id, counterRef));
         }
     }
@@ -150,6 +143,7 @@ const flattenBomTree = (
 };
 
 export const OnshapePage: FC = () => {
+    console.log("[Render] OnshapePage component rendering/re-rendering");
     const [searchParams] = useSearchParams();
 
     const worksapceOrVersion = searchParams.get('wv');
@@ -189,21 +183,23 @@ export const OnshapePage: FC = () => {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [autoLastColWidth, setAutoLastColWidth] = useState<number | null>(null);
 
-    // Fetches the BOM tree from the server and flattens it into RowData[].
+  const hasFetchedRef = useRef(false);
+
     const fetchParts = useCallback(async (signal?: AbortSignal) => {
+        console.log("[API] fetchParts initiated");
         setLoading(true);
         setError(null);
         try {
-            const params = new URLSearchParams();
-            if (worksapceOrVersion) params.set('wv', worksapceOrVersion);
-            if (workspaceOrVersionId) params.set('wvid', workspaceOrVersionId);
-            if (microversionId) params.set('mid', microversionId);
-
-            const res = await fetch(`${API_BASE}/api/parts?${params.toString()}`, { signal });
+            const params = new URLSearchParams(window.location.search);
+            const targetUrl = `${API_BASE}/api/parts?${params.toString()}`;
+            console.log(`[API] Sending fetch request to: ${targetUrl}`);
+            
+            const res = await fetch(targetUrl, { signal });
+            console.log(`[API] Response status: ${res.status} ${res.statusText}`);
+            
             if (!res.ok) throw new Error(`Server responded ${res.status}`);
             const json = await res.json();
 
-            // Handle either a raw array at the top level, or a wrapper object
             const rawNodes: RawBomNode[] = Array.isArray(json)
                 ? json
                 : (json.data ?? json.parts ?? json.bom ?? []);
@@ -213,24 +209,44 @@ export const OnshapePage: FC = () => {
             setData(flattened);
         } catch (err) {
             if (err instanceof Error && err.name !== 'AbortError') {
+                console.error("[API Error] Failed to fetch parts:", err.message);
                 setError(err.message);
             }
         } finally {
             setLoading(false);
         }
-    }, [worksapceOrVersion, workspaceOrVersionId, microversionId]);
+    }, []);
 
     useEffect(() => {
+        if (hasFetchedRef.current) return;
+        hasFetchedRef.current = true;
+
         const controller = new AbortController();
         fetchParts(controller.signal);
         return () => controller.abort();
     }, [fetchParts]);
 
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') closeContextMenu();
+        console.log("[Lifecycle] Component mounted. Triggering initial fetchParts.");
+        const controller = new AbortController();
+        fetchParts(controller.signal);
+        return () => {
+            console.log("[Lifecycle] Component unmounting. Aborting active fetch.");
+            controller.abort();
         };
-        const handleScroll = () => closeContextMenu();
+    }, [fetchParts]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                console.log("[Keyboard] Escape key pressed. Closing all context menus.");
+                closeContextMenu();
+            }
+        };
+        const handleScroll = () => {
+            console.log("[Scroll] Window scroll detected. Closing context menus.");
+            closeContextMenu();
+        };
 
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('scroll', handleScroll, true);
@@ -241,20 +257,26 @@ export const OnshapePage: FC = () => {
     }, []);
 
     const hasPurchasedParts = data.some(row => row.manufacturingMethod === 'Purchased externally');
+    console.log(`[Columns] hasPurchasedParts evaluated to: ${hasPurchasedParts}`);
     const visibleColumns = columns.filter(col => col.key !== 'producer' || hasPurchasedParts);
 
     useEffect(() => {
         const wrapper = wrapperRef.current;
-        if (!wrapper) return;
+        if (!wrapper) {
+            console.log("[ResizeObserver] wrapperRef is currently null.");
+            return;
+        }
 
         const lastCol = visibleColumns[visibleColumns.length - 1];
         if (!lastCol) {
+            console.log("[ResizeObserver] No visible columns available for auto-width calculation.");
             setAutoLastColWidth(null);
             return;
         }
 
         const recompute = () => {
             if (Object.prototype.hasOwnProperty.call(columnWidths, lastCol.key)) {
+                console.log(`[ResizeObserver] Last column [${lastCol.key}] has a custom user width set. Skipping auto calculation.`);
                 setAutoLastColWidth(null);
                 return;
             }
@@ -264,7 +286,9 @@ export const OnshapePage: FC = () => {
                 .reduce((sum, c) => sum + (columnWidths[c.key] || DEFAULT_COL_WIDTH), 0);
 
             const available = wrapper.clientWidth - othersWidth;
-            setAutoLastColWidth(Math.max(MIN_LAST_COL_WIDTH, available));
+            const computedWidth = Math.max(MIN_LAST_COL_WIDTH, available);
+            console.log(`[ResizeObserver] Recomputed last column width: ${computedWidth}px (Wrapper width: ${wrapper.clientWidth}px, Others: ${othersWidth}px)`);
+            setAutoLastColWidth(computedWidth);
         };
 
         recompute();
@@ -290,9 +314,12 @@ export const OnshapePage: FC = () => {
     };
 
     const visibleData = getVisibleData();
+    console.log(`[Render Tree] Render tree generated. Total visible rows: ${visibleData.length} out of ${data.length} total rows.`);
+
     const activeContextMenuRow = data.find(r => r.id === rowContextMenu.rowId);
 
     const focusNextAvailableCell = (rIdx: number, cIdx: number, dRow: number, dCol: number) => {
+        console.log(`[Navigation] Attempting to move focus from row ${rIdx}, col ${cIdx} by offset [row: ${dRow}, col: ${dCol}]`);
         let targetRow = rIdx;
         let targetCol = cIdx;
 
@@ -300,11 +327,18 @@ export const OnshapePage: FC = () => {
             targetRow += dRow;
             targetCol += dCol;
 
-            if (targetRow < 0 || targetRow >= visibleData.length) break;
-            if (targetCol < 0 || targetCol >= visibleColumns.length) break;
+            if (targetRow < 0 || targetRow >= visibleData.length) {
+                console.log(`[Navigation] Target row ${targetRow} is out of bounds (max: ${visibleData.length - 1}). Stopping search.`);
+                break;
+            }
+            if (targetCol < 0 || targetCol >= visibleColumns.length) {
+                console.log(`[Navigation] Target column ${targetCol} is out of bounds (max: ${visibleColumns.length - 1}). Stopping search.`);
+                break;
+            }
 
             const cellElement = document.querySelector(`[data-row="${targetRow}"][data-col="${targetCol}"]`) as HTMLInputElement | HTMLSelectElement;
             if (cellElement && !cellElement.disabled) {
+                console.log(`[Navigation] Found active target cell at row ${targetRow}, col ${targetCol}. Focusing.`);
                 cellElement.focus();
                 if (cellElement instanceof HTMLInputElement) {
                     if (dCol === 1) cellElement.setSelectionRange(0, 0);
@@ -312,6 +346,8 @@ export const OnshapePage: FC = () => {
                     else cellElement.select();
                 }
                 break;
+            } else {
+                console.log(`[Navigation] Cell at row ${targetRow}, col ${targetCol} is disabled or missing. Continuing search vector.`);
             }
         }
     };
@@ -329,29 +365,37 @@ export const OnshapePage: FC = () => {
 
         if (isUp || isDown) {
             e.preventDefault();
+            console.log(`[Keydown] Vertical arrow pressed (${e.key}) at row ${rowIndex}, col ${colIndex}`);
             const dRow = isUp ? -1 : 1;
             focusNextAvailableCell(rowIndex, colIndex, dRow, 0);
         } else if (isLeft) {
             if (isCtrl || (isInput && input.selectionStart === 0 && input.selectionEnd === 0)) {
                 e.preventDefault();
+                console.log(`[Keydown] Left arrow navigation triggered at row ${rowIndex}, col ${colIndex} (Ctrl: ${isCtrl})`);
                 focusNextAvailableCell(rowIndex, colIndex, 0, -1);
             }
         } else if (isRight) {
             if (isCtrl || (isInput && input.selectionStart === input.value.length && input.selectionEnd === input.value.length)) {
                 e.preventDefault();
+                console.log(`[Keydown] Right arrow navigation triggered at row ${rowIndex}, col ${colIndex} (Ctrl: ${isCtrl})`);
                 focusNextAvailableCell(rowIndex, colIndex, 0, 1);
             }
         } else if (e.key === 'Enter') {
+            console.log(`[Keydown] Enter key pressed at row ${rowIndex}, col ${colIndex}. Blurring element.`);
             target.blur();
         }
     };
 
-   const handleResizeStart = (e: React.PointerEvent, key: string) => {
+    const handleResizeStart = (e: React.PointerEvent, key: string) => {
+        console.log(`[Resize] Pointer down on resize handle for column: [${key}]`);
         e.stopPropagation();
         e.preventDefault();
 
         const th = (e.target as HTMLElement).closest('th');
-        if (!th) return;
+        if (!th) {
+            console.warn("[Resize Warning] Could not locate parent <th> element for resize handle.");
+            return;
+        }
 
         const table = th.closest('table');
         const colIndex = Array.from(th.parentNode?.children || []).indexOf(th);
@@ -371,6 +415,7 @@ export const OnshapePage: FC = () => {
 
         const targetElement = e.target as HTMLElement;
         targetElement.setPointerCapture(e.pointerId);
+        console.log(`[Resize] Pointer capture successfully acquired for pointer ID ${e.pointerId}`);
 
         const applyWidth = (w: number) => {
             currentWidth = Math.max(60, w);
@@ -417,13 +462,18 @@ export const OnshapePage: FC = () => {
         };
 
         const onPointerUp = (upEvent: PointerEvent) => {
+            console.log(`[Resize] Pointer up received. Final width for [${key}]: ${currentWidth}px`);
             isActive = false;
             if (rafId !== null) cancelAnimationFrame(rafId);
             targetElement.releasePointerCapture(upEvent.pointerId);
             targetElement.removeEventListener('pointermove', onPointerMove);
             targetElement.removeEventListener('pointerup', onPointerUp);
 
-            setColumnWidths(prev => ({ ...prev, [key]: currentWidth }));
+            setColumnWidths(prev => {
+                const updated = { ...prev, [key]: currentWidth };
+                console.log("[Resize] Updated columnWidths state map:", updated);
+                return updated;
+            });
         };
 
         targetElement.addEventListener('pointermove', onPointerMove);
@@ -432,6 +482,7 @@ export const OnshapePage: FC = () => {
     };
 
     const handleResizeDoubleClick = (e: React.MouseEvent, key: string, label: string) => {
+        console.log(`[Resize DoubleClick] Auto-fitting column [${key}] ("${label}")`);
         e.stopPropagation();
         let maxChars = label.length;
         visibleData.forEach(row => {
@@ -442,10 +493,12 @@ export const OnshapePage: FC = () => {
         });
 
         const tightFitWidth = Math.ceil((maxChars * 7.5) + 32);
+        console.log(`[Resize DoubleClick] Calculated tight fit width for [${key}]: ${tightFitWidth}px`);
         setColumnWidths(prev => ({ ...prev, [key]: Math.max(70, tightFitWidth) }));
     };
 
     const handleAddRow = (type: 'part' | 'subassembly', parentId: number | null = null) => {
+        console.log(`[Add Row] Triggered to add new [${type}] with parentId: ${parentId}`);
         const newId = data.length > 0 ? Math.max(...data.map(row => row.id)) + 1 : 1;
         const newRow: RowData = {
             id: newId, type, parentId, isExpanded: true, projectName: '', manufacturingStatus: 'Not Started',
@@ -456,7 +509,11 @@ export const OnshapePage: FC = () => {
         
         setData(prev => {
             let newData = [...prev, newRow];
-            if (parentId !== null) newData = newData.map(row => row.id === parentId ? { ...row, isExpanded: true } : row);
+            if (parentId !== null) {
+                console.log(`[Add Row] Expanding parent row ID [${parentId}] to show newly added child.`);
+                newData = newData.map(row => row.id === parentId ? { ...row, isExpanded: true } : row);
+            }
+            console.log("[Add Row] New data state length after insertion:", newData.length);
             return newData;
         });
         closeContextMenu();
@@ -464,11 +521,21 @@ export const OnshapePage: FC = () => {
 
     const toggleExpand = (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
-        setData(prev => prev.map(row => row.id === id ? { ...row, isExpanded: !row.isExpanded } : row));
+        setData(prev => {
+            const target = prev.find(r => r.id === id);
+            const newState = target ? !target.isExpanded : true;
+            console.log(`[Toggle Expand] Toggling row ID [${id}]. New isExpanded state: ${newState}`);
+            return prev.map(row => row.id === id ? { ...row, isExpanded: newState } : row);
+        });
     };
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
-        if (!isHandleDragging) { e.preventDefault(); return; }
+        if (!isHandleDragging) {
+            console.log("[Column Drag] Drag attempted without handle grip active. Preventing drag.");
+            e.preventDefault();
+            return;
+        }
+        console.log(`[Column Drag] Drag started on column index: ${index} (${visibleColumns[index]?.key})`);
         setDraggedIdx(index);
         const img = new Image();
         img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -479,21 +546,37 @@ export const OnshapePage: FC = () => {
     const handleDragOver = (e: React.DragEvent, index: number) => {
         e.preventDefault();
         if (draggedIdx === null) return;
-        setDropTargetIdx(index);
+        if (dropTargetIdx !== index) {
+            console.log(`[Column Drag Over] Dragging over column index: ${index}`);
+            setDropTargetIdx(index);
+        }
     };
 
     const handleDrop = (targetIdx: number) => {
-        if (draggedIdx === null || draggedIdx === targetIdx) { resetDragState(); return; }
+        console.log(`[Column Drop] Dropped column draggedIdx: ${draggedIdx} onto targetIdx: ${targetIdx}`);
+        if (draggedIdx === null || draggedIdx === targetIdx) {
+            console.log("[Column Drop] Invalid or identical drop position. Resetting drag state.");
+            resetDragState();
+            return;
+        }
         const originalFromIdx = columns.findIndex(c => c.key === visibleColumns[draggedIdx].key);
         const originalToIdx = columns.findIndex(c => c.key === visibleColumns[targetIdx].key);
+        console.log(`[Column Drop] Mapping visible indices to original columns array indices [from: ${originalFromIdx} -> to: ${originalToIdx}]`);
         moveColumn(originalFromIdx, originalToIdx);
         resetDragState();
     };
 
-    const resetDragState = () => { setDraggedIdx(null); setDropTargetIdx(null); setIsHandleDragging(false); };
+    const resetDragState = () => {
+        console.log("[Column Drag] Resetting column drag and drop states.");
+        setDraggedIdx(null);
+        setDropTargetIdx(null);
+        setIsHandleDragging(false);
+    };
+
     const getDropIndicatorClass = (index: number) => (draggedIdx !== null && dropTargetIdx !== null && index === dropTargetIdx && draggedIdx !== dropTargetIdx) ? 'drop-indicator-both' : '';
 
     const handleCellChange = (rowId: number, col: ColumnConfig, rawValue: string) => {
+        console.log(`[Cell Change] Row ID [${rowId}], Column [${col.key}] raw value updated to:`, rawValue);
         setData(prev => prev.map(row => {
             if (row.id !== rowId) return row;
             const updatedRow = { ...row };
@@ -505,11 +588,14 @@ export const OnshapePage: FC = () => {
             }
 
             if (col.key === 'manufacturingMethod') {
+                console.log(`[Cell Change Logic] manufacturingMethod changed to [${rawValue}] for row [${rowId}]`);
                 if (rawValue === 'Purchased externally') {
                     updatedRow.group = 'Purchased part';
+                    console.log(`[Cell Change Logic] Auto-updating group to 'Purchased part'`);
                 } else if (row.manufacturingMethod === 'Purchased externally' && rawValue !== 'Purchased externally') {
                     updatedRow.group = 'Unique part';
                     updatedRow.producer = '';
+                    console.log(`[Cell Change Logic] Resetting group to 'Unique part' and clearing producer.`);
                 }
             }
             return updatedRow;
@@ -518,7 +604,9 @@ export const OnshapePage: FC = () => {
 
     const handleNumberBlur = (rowId: number, col: ColumnConfig, rawValue: string | number) => {
         const strVal = String(rawValue).trim();
+        console.log(`[Number Blur] Row ID [${rowId}], Column [${col.key}] raw blur value: "${strVal}"`);
         if (strVal === '' || strVal === '.') {
+            console.log(`[Number Blur] Value is empty or single dot. Defaulting to '0'`);
             handleCellChange(rowId, col, '0');
             return;
         }
@@ -527,6 +615,7 @@ export const OnshapePage: FC = () => {
         if (col.key === 'quantity' || col.key === 'revision') {
             const intVal = parseInt(processed, 10);
             const finalVal = isNaN(intVal) ? 0 : Math.max(0, intVal);
+            console.log(`[Number Blur Integer] Parsed integer value: ${finalVal}`);
             handleCellChange(rowId, col, String(finalVal));
             return;
         }
@@ -540,11 +629,16 @@ export const OnshapePage: FC = () => {
 
         const num = Number(processed);
         const finalVal = isNaN(num) ? 0 : num;
+        console.log(`[Number Blur Decimal] Parsed decimal float value: ${finalVal}`);
         handleCellChange(rowId, col, String(finalVal));
     };
 
     const moveColumn = (fromIdx: number, toIdx: number) => {
-        if (toIdx < 0 || toIdx >= columns.length) return;
+        if (toIdx < 0 || toIdx >= columns.length) {
+            console.warn(`[Move Column] Invalid destination index ${toIdx}. Aborting move.`);
+            return;
+        }
+        console.log(`[Move Column] Moving column from index ${fromIdx} to ${toIdx}`);
         const updatedColumns = [...columns];
         const [movedItem] = updatedColumns.splice(fromIdx, 1);
         updatedColumns.splice(toIdx, 0, movedItem);
@@ -554,19 +648,28 @@ export const OnshapePage: FC = () => {
     const handleContextMenu = (e: React.MouseEvent, key: string) => {
         e.preventDefault();
         const originalIndex = columns.findIndex(c => c.key === key);
+        console.log(`[Header Context Menu] Right-clicked header [${key}] at coordinates [x: ${e.clientX}, y: ${e.clientY}]`);
         setContextMenu({ visible: true, x: e.clientX, y: e.clientY, columnIndex: originalIndex });
     };
 
-    const closeContextMenu = () => { setContextMenu(prev => ({ ...prev, visible: false })); setRowContextMenu(prev => ({ ...prev, visible: false })); };
+    const closeContextMenu = () => {
+        if (contextMenu.visible || rowContextMenu.visible) {
+            console.log("[Context Menu] Closing all active context menus.");
+        }
+        setContextMenu(prev => ({ ...prev, visible: false }));
+        setRowContextMenu(prev => ({ ...prev, visible: false }));
+    };
 
     const handleRowContextMenu = (e: React.MouseEvent, rowId: number) => {
         e.preventDefault();
         e.stopPropagation();
+        console.log(`[Row Context Menu] Right-clicked row ID [${rowId}] at coordinates [x: ${e.clientX}, y: ${e.clientY}]`);
         setRowContextMenu({ visible: true, x: e.clientX, y: e.clientY, rowId });
     };
 
     const handleDeleteRowClick = () => {
         if (rowContextMenu.rowId !== null) {
+            console.log(`[Delete Row] Deleting row ID [${rowContextMenu.rowId}] and all its recursive children.`);
             const idsToDelete = new Set<number>();
             const queue = [rowContextMenu.rowId];
             while(queue.length > 0) {
@@ -574,6 +677,7 @@ export const OnshapePage: FC = () => {
                 idsToDelete.add(currentId);
                 data.forEach(row => { if (row.parentId === currentId) queue.push(row.id); });
             }
+            console.log(`[Delete Row] Total rows marked for deletion (including sub-tree): ${idsToDelete.size}`, Array.from(idsToDelete));
             setData(prev => prev.filter(row => !idsToDelete.has(row.id)));
         }
         closeContextMenu();
