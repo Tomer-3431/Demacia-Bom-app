@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import '../css/Table.css';
 
@@ -53,6 +53,34 @@ interface RowContextMenuState {
     rowId: number | null;
 }
 
+// Raw shape returned by the server's /api/parts endpoint — a nested tree,
+// since a subassembly can contain parts and subassemblies recursively.
+// NOTE: field names here are a best guess (id, type, children, etc.) —
+// not yet confirmed against the real server response. If parts render
+// blank or the shape is different, check the Network tab response for
+// /api/parts and adjust this interface + flattenBomTree to match.
+interface RawBomNode {
+    id: string | number;
+    type: 'part' | 'subassembly';
+    projectName?: string;
+    manufacturingStatus?: string;
+    partId?: string;
+    revision?: number;
+    partName?: string;
+    name?: string;
+    whereUsed?: string;
+    quantity?: number | string;
+    documentUrl?: string;
+    material?: string;
+    mass?: number | string;
+    price?: number | string;
+    manufacturingMethod?: string;
+    producer?: string;
+    comments?: string;
+    group?: string;
+    children?: RawBomNode[];
+}
+
 const PART_STATUS_OPTIONS = [
     'Not Started',
     'In Design',
@@ -79,6 +107,48 @@ const GROUP_OPTIONS = ['Unique part', 'Standard part'];
 const MIN_LAST_COL_WIDTH = 120;
 const DEFAULT_COL_WIDTH = 120;
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5050';
+
+// Flattens the nested BOM tree from the server into the flat RowData[]
+// the table's expand/collapse + parentId logic expects. Assigns fresh
+// sequential numeric ids (since server ids may be strings/Onshape IDs)
+// while wiring up parentId links so getVisibleData()'s tree walk works.
+const flattenBomTree = (
+    nodes: RawBomNode[],
+    parentId: number | null,
+    counterRef: { current: number }
+): RowData[] => {
+    const result: RowData[] = [];
+    for (const node of nodes) {
+        const id = counterRef.current++;
+        result.push({
+            id,
+            type: node.type,
+            parentId,
+            isExpanded: true,
+            projectName: node.projectName ?? '',
+            manufacturingStatus: node.manufacturingStatus ?? (node.type === 'subassembly' ? 'Not Started' : 'Not Started'),
+            partId: node.partId ?? '',
+            revision: node.revision ?? 1,
+            partName: node.partName ?? node.name ?? '',
+            whereUsed: node.whereUsed ?? '',
+            quantity: node.quantity ?? (node.type === 'part' ? 0 : 1),
+            documentUrl: node.documentUrl ?? '',
+            material: node.material ?? '',
+            mass: node.mass ?? 0,
+            price: node.price ?? 0,
+            manufacturingMethod: node.manufacturingMethod ?? '',
+            producer: node.producer ?? '',
+            comments: node.comments ?? '',
+            group: node.group ?? (node.type === 'subassembly' ? 'Subassembly' : 'Unique part'),
+        });
+        if (node.children && node.children.length > 0) {
+            result.push(...flattenBomTree(node.children, id, counterRef));
+        }
+    }
+    return result;
+};
+
 export const OnshapePage: FC = () => {
     const [searchParams] = useSearchParams();
 
@@ -86,36 +156,9 @@ export const OnshapePage: FC = () => {
     const workspaceOrVersionId = searchParams.get('wvid');
     const microversionId = searchParams.get('mid');
 
-    const [data, setData] = useState<RowData[]>([
-        { 
-            id: 1, type: 'subassembly', parentId: null, isExpanded: true, 
-            projectName: 'Project Alpha', manufacturingStatus: 'In construction', partId: 'ASM-5001', 
-            revision: 1, partName: 'Drive System Assembly', whereUsed: 'Main Assembly', quantity: 1, 
-            documentUrl: '', material: '', mass: 0, price: 0, 
-            manufacturingMethod: '', producer: '', comments: 'Core assembly tracking', group: 'Subassembly' 
-        },
-        { 
-            id: 2, type: 'part', parentId: 1, isExpanded: false, 
-            projectName: 'Project Alpha', manufacturingStatus: 'In Production', partId: 'PN-10024', 
-            revision: 2, partName: 'Housing, Motor', whereUsed: 'ASM-5001', quantity: 1, 
-            documentUrl: 'http://docs/10024', material: 'ABS', mass: 1.2, price: 4.5, 
-            manufacturingMethod: 'Printed in 3D', producer: '', comments: '', group: 'Unique part' 
-        },
-        { 
-            id: 3, type: 'part', parentId: 1, isExpanded: false, 
-            projectName: 'Project Alpha', manufacturingStatus: 'Completed', partId: 'PN-10025', 
-            revision: 1, partName: 'Shaft, Drive', whereUsed: 'ASM-5001', quantity: 1, 
-            documentUrl: 'http://docs/10025', material: 'Stainless Steel 304', mass: 2.5, price: 12.0, 
-            manufacturingMethod: 'Lathe', producer: '', comments: '', group: 'Standard part' 
-        },
-        { 
-            id: 4, type: 'part', parentId: null, isExpanded: false, 
-            projectName: 'Project Alpha', manufacturingStatus: 'On Hold', partId: 'PN-10023', 
-            revision: 1, partName: 'Bracket, Mounting', whereUsed: 'Main Assembly', quantity: 2, 
-            documentUrl: '', material: 'Aluminum 6061-T6', mass: 0.8, price: 5.0, 
-            manufacturingMethod: 'Purchased externally', producer: 'McMaster-Carr', comments: '', group: 'Purchased part' 
-        },
-    ]);
+    const [data, setData] = useState<RowData[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
 
     const [columns, setColumns] = useState<ColumnConfig[]>([
         { key: 'projectName', label: 'Project Name', type: 'string' },
@@ -143,11 +186,45 @@ export const OnshapePage: FC = () => {
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, columnIndex: -1 });
     const [rowContextMenu, setRowContextMenu] = useState<RowContextMenuState>({ visible: false, x: 0, y: 0, rowId: null });
 
-    // Auto-fill state for the last column: when the user hasn't manually
-    // resized the last column, it stretches to consume any leftover space
-    // in the table wrapper instead of leaving a dead gap.
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [autoLastColWidth, setAutoLastColWidth] = useState<number | null>(null);
+
+    // Fetches the BOM tree from the server and flattens it into RowData[].
+    const fetchParts = useCallback(async (signal?: AbortSignal) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const params = new URLSearchParams();
+            if (worksapceOrVersion) params.set('wv', worksapceOrVersion);
+            if (workspaceOrVersionId) params.set('wvid', workspaceOrVersionId);
+            if (microversionId) params.set('mid', microversionId);
+
+            const res = await fetch(`${API_BASE}/api/parts?${params.toString()}`, { signal });
+            if (!res.ok) throw new Error(`Server responded ${res.status}`);
+            const json = await res.json();
+
+            // Handle either a raw array at the top level, or a wrapper object
+            const rawNodes: RawBomNode[] = Array.isArray(json)
+                ? json
+                : (json.data ?? json.parts ?? json.bom ?? []);
+
+            const counterRef = { current: 1 };
+            const flattened = flattenBomTree(rawNodes, null, counterRef);
+            setData(flattened);
+        } catch (err) {
+            if (err instanceof Error && err.name !== 'AbortError') {
+                setError(err.message);
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [worksapceOrVersion, workspaceOrVersionId, microversionId]);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        fetchParts(controller.signal);
+        return () => controller.abort();
+    }, [fetchParts]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -166,9 +243,6 @@ export const OnshapePage: FC = () => {
     const hasPurchasedParts = data.some(row => row.manufacturingMethod === 'Purchased externally');
     const visibleColumns = columns.filter(col => col.key !== 'producer' || hasPurchasedParts);
 
-    // Recompute the auto-fill width for the last column whenever the
-    // wrapper resizes, the visible column set changes, or any column
-    // width (manual or otherwise) changes.
     useEffect(() => {
         const wrapper = wrapperRef.current;
         if (!wrapper) return;
@@ -180,9 +254,6 @@ export const OnshapePage: FC = () => {
         }
 
         const recompute = () => {
-            // If the user has manually resized this specific column
-            // (it has an explicit entry in columnWidths), respect that
-            // and stop auto-filling it.
             if (Object.prototype.hasOwnProperty.call(columnWidths, lastCol.key)) {
                 setAutoLastColWidth(null);
                 return;
@@ -295,8 +366,8 @@ export const OnshapePage: FC = () => {
         let isActive = true;
         let rafId: number | null = null;
 
-        const EDGE_ZONE = 40; // px from screen edge that triggers auto-growth
-        const MAX_EDGE_SPEED = 40; // px of column growth per frame at the very edge
+        const EDGE_ZONE = 40;
+        const MAX_EDGE_SPEED = 40;
 
         const targetElement = e.target as HTMLElement;
         targetElement.setPointerCapture(e.pointerId);
@@ -307,11 +378,6 @@ export const OnshapePage: FC = () => {
             if (table) table.style.width = 'max-content';
         };
 
-        // Persistent per-frame loop: runs continuously from pointerdown to
-        // pointerup regardless of whether new pointermove events arrive.
-        // This lets holding the cursor at the screen edge keep growing the
-        // column indefinitely, since the loop doesn't depend on the cursor
-        // actually moving any further.
         const tick = () => {
             if (!isActive) return;
 
@@ -324,9 +390,6 @@ export const OnshapePage: FC = () => {
 
             applyWidth(initialWidth + scaledDelta);
 
-            // Infinite expansion while the cursor rests near/at the right
-            // edge of the screen: grow proportionally to how deep into the
-            // edge zone the cursor is, every frame, with no upper bound.
             const distanceIntoRightEdge = latestClientX - (window.innerWidth - EDGE_ZONE);
             if (distanceIntoRightEdge > 0) {
                 const growth = Math.min(MAX_EDGE_SPEED, (distanceIntoRightEdge / EDGE_ZONE) * MAX_EDGE_SPEED);
@@ -338,8 +401,6 @@ export const OnshapePage: FC = () => {
                 applyWidth(currentWidth - shrink);
             }
 
-            // Keep the wrapper scrolled to follow growth even away from the
-            // hard screen edge, once the cursor nears the wrapper's own edge.
             if (wrapper && !isShrinking) {
                 const wrapperRect = wrapper.getBoundingClientRect();
                 if (latestClientX > wrapperRect.right - 100) {
@@ -548,7 +609,15 @@ export const OnshapePage: FC = () => {
             <div className="table-controls">
                 <button onClick={() => handleAddRow('part')}>+ Add Part</button>
                 <button onClick={() => handleAddRow('subassembly')} className="btn-secondary">+ Add Subassembly</button>
+                <button onClick={() => fetchParts()} className="btn-secondary">↻ Refresh</button>
             </div>
+
+            {loading && <div style={{ padding: 12 }}>Loading BOM…</div>}
+            {error && (
+                <div style={{ padding: 12, color: '#b91c1c' }}>
+                    Failed to load parts: {error}
+                </div>
+            )}
 
             <div className="table-wrapper" ref={wrapperRef}>
                 <table className="custom-table">
@@ -684,7 +753,7 @@ export const OnshapePage: FC = () => {
                                 </tr>
                             );
                         })}
-                        {visibleData.length === 0 && (
+                        {!loading && visibleData.length === 0 && (
                             <tr>
                                 <td colSpan={visibleColumns.length} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
                                     No items in BOM. Add a part or subassembly to begin.
