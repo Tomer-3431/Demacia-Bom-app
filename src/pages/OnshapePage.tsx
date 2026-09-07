@@ -146,9 +146,14 @@ export const OnshapePage: FC = () => {
     console.log("[Render] OnshapePage component rendering/re-rendering");
     const [searchParams] = useSearchParams();
 
-    const worksapceOrVersion = searchParams.get('wv');
+    const workspaceOrVersion = searchParams.get('wv');
     const workspaceOrVersionId = searchParams.get('wvid');
     const microversionId = searchParams.get('mid');
+
+    const docId = searchParams.get('documentId') || searchParams.get('did') || searchParams.get('d');
+    const wvmType = searchParams.get('wv') || searchParams.get('wvmT') || workspaceOrVersion;
+    const wvmId = searchParams.get('wvid') || searchParams.get('wvId') || workspaceOrVersionId;
+    const elementId = searchParams.get('elementId') || searchParams.get('eid') || searchParams.get('e');
 
     const [data, setData] = useState<RowData[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -183,17 +188,20 @@ export const OnshapePage: FC = () => {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [autoLastColWidth, setAutoLastColWidth] = useState<number | null>(null);
 
-  const hasFetchedRef = useRef(false);
+    const hasFetchedRef = useRef(false);
 
     const fetchParts = useCallback(async (signal?: AbortSignal) => {
         console.log("[API] fetchParts initiated");
         setLoading(true);
         setError(null);
         try {
-            const params = new URLSearchParams(window.location.search);
-            const targetUrl = `${API_BASE}/api/parts?${params.toString()}`;
+            let targetUrl = `${API_BASE}/api/db/bom/all`;
+
+            if (docId && wvmType && wvmId && elementId) {
+                targetUrl = `${API_BASE}/api/onshape/bom/d/${docId}/wvmT/${wvmType}/wvmI/${wvmId}/e/${elementId}`;
+            }
+
             console.log(`[API] Sending fetch request to: ${targetUrl}`);
-            
             const res = await fetch(targetUrl, { signal });
             console.log(`[API] Response status: ${res.status} ${res.statusText}`);
             
@@ -215,7 +223,7 @@ export const OnshapePage: FC = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [docId, wvmType, wvmId, elementId]);
 
     useEffect(() => {
         if (hasFetchedRef.current) return;
@@ -224,16 +232,6 @@ export const OnshapePage: FC = () => {
         const controller = new AbortController();
         fetchParts(controller.signal);
         return () => controller.abort();
-    }, [fetchParts]);
-
-    useEffect(() => {
-        console.log("[Lifecycle] Component mounted. Triggering initial fetchParts.");
-        const controller = new AbortController();
-        fetchParts(controller.signal);
-        return () => {
-            console.log("[Lifecycle] Component unmounting. Aborting active fetch.");
-            controller.abort();
-        };
     }, [fetchParts]);
 
     useEffect(() => {
@@ -704,7 +702,7 @@ export const OnshapePage: FC = () => {
             <div className="table-header-section">
                 <h2>BOM Table</h2>
                 <div className="metadata-tag">
-                    <div>wv: {worksapceOrVersion || 'None'}</div>
+                    <div>wv: {workspaceOrVersion || 'None'}</div>
                     <div>wvid: {workspaceOrVersionId || 'None'}</div>
                     <div>mid: {microversionId || 'None'}</div>
                 </div>
