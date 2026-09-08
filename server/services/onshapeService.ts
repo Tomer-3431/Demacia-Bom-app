@@ -418,39 +418,75 @@ async function getBom(
 /**
  * Helper function for binary HTTP requests to Onshape API.
  * Returns raw file data or image payload directly in its Buffer (blob) form.
+ *
+ * IMPORTANT: A few endpoints (STL/Parasolid part export in particular)
+ * respond with a 307 redirect to a separate Onshape "modeling server"
+ * host rather than the file itself — see the Java client docs for
+ * exportStl ("returns a 307 redirect") and
+ * https://forum.onshape.com/discussion/12415/. Fetch's default
+ * `redirect: 'follow'` behavior strips the Authorization header when
+ * following a cross-origin redirect (per the Fetch spec), so the
+ * modeling server then correctly rejects the now-unauthenticated
+ * request with 401. We work around this by following redirects
+ * manually and re-attaching the Authorization header ourselves.
  */
 async function onshapeRequestBuffer(
   path: string,
   options: RequestOptions = {}
 ): Promise<Buffer> {
   const { method = 'GET', body, query } = options;
-  const url = buildUrl(path, query);
+  let url = buildUrl(path, query);
 
-  const response = await fetch(url, {
-    method,
-    headers: {
-      Accept: '*/*',
-      ...(body !== undefined ? { 'Content-Type': 'application/json;charset=UTF-8' } : {}),
-      Authorization: authHeader(),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  // Cap redirect hops as a safety net against loops.
+  for (let redirectCount = 0; redirectCount < 5; redirectCount++) {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Accept: '*/*',
+        ...(body !== undefined ? { 'Content-Type': 'application/json;charset=UTF-8' } : {}),
+        Authorization: authHeader(),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      redirect: 'manual',
+    });
 
-  if (!response.ok) {
-    const text = await response.text();
-    let parsed: unknown = text;
-    try {
-      parsed = JSON.parse(text);
-    } catch {}
-    throw new OnshapeApiError(
-      `Onshape API binary request failed: ${method} ${path} -> ${response.status}`,
-      response.status,
-      parsed
-    );
+    // Manually follow redirects (307/302/etc.) so we can re-send the
+    // Authorization header, which fetch would otherwise drop.
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new OnshapeApiError(
+          `Onshape API binary request redirected without a Location header: ${method} ${path} -> ${response.status}`,
+          response.status,
+          undefined
+        );
+      }
+      url = new URL(location, url).toString();
+      continue;
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      let parsed: unknown = text;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
+      throw new OnshapeApiError(
+        `Onshape API binary request failed: ${method} ${path} -> ${response.status}`,
+        response.status,
+        parsed
+      );
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  throw new OnshapeApiError(
+    `Onshape API binary request exceeded max redirects: ${method} ${path}`,
+    310,
+    undefined
+  );
 }
 
 /**
