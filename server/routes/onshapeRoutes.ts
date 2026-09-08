@@ -14,6 +14,7 @@ const bomPath = "/bom/d/:documentID/wvmT/:wvmType/wvmI/:wvmID/e/:elementID";
 router.get(bomPath, onshapeController.getBom);
 
 router.get(`${partPath}/thumbnail/s/:size`, onshapeController.getPartThumbnail);
+router.get(`${partPath}/thumbnail`, onshapeController.getPartThumbnail);
 router.post(
   `${partPath}/thumbnail`,
   express.raw({ type: "image/*", limit: "50mb"}),
@@ -22,6 +23,10 @@ router.post(
 
 router.get(
   `${bomPath}/thumbnail/s/:size`,
+  onshapeController.getElementThumbnail,
+);
+router.get(
+  `${bomPath}/thumbnail`,
   onshapeController.getElementThumbnail,
 );
 router.post(
