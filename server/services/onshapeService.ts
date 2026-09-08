@@ -489,6 +489,36 @@ function getImageDimensions(buffer: Buffer): { width: number; height: number } {
   return { width: 300, height: 300 };
 }
 
+/**
+ * Gets a thumbnail image for an element as a binary Buffer.
+ * Endpoint: GET v10/thumbnails/d/{did}/{wvmType}/{wvmID}/e/{eid}/s/{size}
+ * Default size: '300x300' (supported sizes include '70x70', '300x300', '600x600').
+ */
+async function getElementThumbnail(
+  ref: OnshapeBomRef,
+  size: string = '300x300'
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID } = ref;
+  return onshapeRequestBuffer(
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/s/${size}`
+  );
+}
+
+/**
+ * Gets a thumbnail image for a specific part as a binary Buffer.
+ * Endpoint: GET v10/thumbnails/d/{did}/{wvmType}/{wvmID}/e/{eid}/p/{pid}/s/{size}
+ * Default size: '300x300'.
+ */
+async function getPartThumbnail(
+  ref: OnshapePartRef,
+  size: string = '300x300'
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+  return onshapeRequestBuffer(
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}/s/${size}`
+  );
+}
+
 export default {
   checkConnection,
   getPart,
