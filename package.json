@@ -24,10 +24,15 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.5.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
     "oxlint": "^1.79.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vite-plugin-mkcert": "^2.1.0"
   }
