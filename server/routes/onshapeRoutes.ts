@@ -17,7 +17,7 @@ router.get(`${partPath}/thumbnail/s/:size`, onshapeController.getPartThumbnail);
 router.get(`${partPath}/thumbnail`, onshapeController.getPartThumbnail);
 router.post(
   `${partPath}/thumbnail`,
-  express.raw({ type: "image/*", limit: "50mb"}),
+  express.raw({ type: "image/*", limit: "50mb" }),
   onshapeController.setPartThumbnail,
 );
 
@@ -25,13 +25,10 @@ router.get(
   `${bomPath}/thumbnail/s/:size`,
   onshapeController.getElementThumbnail,
 );
-router.get(
-  `${bomPath}/thumbnail`,
-  onshapeController.getElementThumbnail,
-);
+router.get(`${bomPath}/thumbnail`, onshapeController.getElementThumbnail);
 router.post(
   `${bomPath}/thumbnail`,
-  express.raw({ type: "image/*", limit: "50mb"}),
+  express.raw({ type: "image/*", limit: "50mb" }),
   onshapeController.setElementThumbnail,
 );
 
