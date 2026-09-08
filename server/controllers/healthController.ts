@@ -1,9 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { isConnected } from "../db/connection";
 import { allowedOrigins } from "../app";
-import dotenv from 'dotenv';
-
-dotenv.config();
+import 'dotenv/config';
 
 const CLIENT_SECRET_KEY = process.env.CLIENT_SECRET;
 
@@ -19,7 +17,6 @@ export function checkAuth(req: Request, res: Response, next: NextFunction) {
   if (clientSecret !== CLIENT_SECRET_KEY) {
     return res.status(401).json({ message: 'Invalid or missing client secrets' });
   }
-
 
   return next();
 }

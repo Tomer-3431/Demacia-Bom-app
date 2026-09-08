@@ -35,10 +35,7 @@
  * API Explorer (https://cad.onshape.com/glassworks/explorer/) if a call
  * starts returning 404s, since Onshape does bump these over time.
  */
-
-import dotenv from 'dotenv';
-
-dotenv.config();
+import 'dotenv/config';
 
 const ONSHAPE_BASE_URL = process.env.ONSHAPE_BASE_URL || 'https://cad.onshape.com/api';
 
@@ -418,9 +415,283 @@ async function getBom(
   );
 }
 
+/**
+ * Helper function for binary HTTP requests to Onshape API.
+ * Returns raw file data or image payload directly in its Buffer (blob) form.
+ *
+ * IMPORTANT: A few endpoints (STL/Parasolid part export in particular)
+ * respond with a 307 redirect to a separate Onshape "modeling server"
+ * host rather than the file itself — see the Java client docs for
+ * exportStl ("returns a 307 redirect") and
+ * https://forum.onshape.com/discussion/12415/. Fetch's default
+ * `redirect: 'follow'` behavior strips the Authorization header when
+ * following a cross-origin redirect (per the Fetch spec), so the
+ * modeling server then correctly rejects the now-unauthenticated
+ * request with 401. We work around this by following redirects
+ * manually and re-attaching the Authorization header ourselves.
+ */
+async function onshapeRequestBuffer(
+  path: string,
+  options: RequestOptions = {}
+): Promise<Buffer> {
+  const { method = 'GET', body, query } = options;
+  let url = buildUrl(path, query);
+
+  // Cap redirect hops as a safety net against loops.
+  for (let redirectCount = 0; redirectCount < 5; redirectCount++) {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Accept: '*/*',
+        ...(body !== undefined ? { 'Content-Type': 'application/json;charset=UTF-8' } : {}),
+        Authorization: authHeader(),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      redirect: 'manual',
+    });
+
+    // Manually follow redirects (307/302/etc.) so we can re-send the
+    // Authorization header, which fetch would otherwise drop.
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new OnshapeApiError(
+          `Onshape API binary request redirected without a Location header: ${method} ${path} -> ${response.status}`,
+          response.status,
+          undefined
+        );
+      }
+      url = new URL(location, url).toString();
+      continue;
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      let parsed: unknown = text;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
+      throw new OnshapeApiError(
+        `Onshape API binary request failed: ${method} ${path} -> ${response.status}`,
+        response.status,
+        parsed
+      );
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  throw new OnshapeApiError(
+    `Onshape API binary request exceeded max redirects: ${method} ${path}`,
+    310,
+    undefined
+  );
+}
+
+/**
+ * Automatically inspects PNG or JPEG header bytes to determine image width and height.
+ */
+function getImageDimensions(buffer: Buffer): { width: number; height: number } {
+  // Check PNG magic bytes: 0x89 0x50 0x4E 0x47
+  if (
+    buffer.length >= 24 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    return { width, height };
+  }
+
+  // Check JPEG magic bytes: 0xFF 0xD8
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    while (offset < buffer.length) {
+      if (buffer[offset] !== 0xff) break;
+      const marker = buffer[offset + 1];
+      if (marker >= 0xc0 && marker <= 0xc2) {
+        const height = buffer.readUInt16BE(offset + 5);
+        const width = buffer.readUInt16BE(offset + 7);
+        return { width, height };
+      }
+      const blockLength = buffer.readUInt16BE(offset + 2);
+      offset += 2 + blockLength;
+    }
+  }
+
+  return { width: 300, height: 300 };
+}
+
+/**
+ * Gets a thumbnail image for an element as a binary Buffer.
+ * Endpoint: GET v10/thumbnails/d/{did}/{wvmType}/{wvmID}/e/{eid}/s/{size}
+ * Default size: '300x300' (supported sizes include '70x70', '300x300', '600x600').
+ */
+async function getElementThumbnail(
+  ref: OnshapeBomRef,
+  size: string = '300x300'
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID } = ref;
+  return onshapeRequestBuffer(
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/s/${size}`
+  );
+}
+
+/**
+ * Gets a thumbnail image for a specific part as a binary Buffer.
+ * Endpoint: GET v10/thumbnails/d/{did}/{wvmType}/{wvmID}/e/{eid}/p/{pid}/s/{size}
+ * Default size: '300x300'.
+ */
+async function getPartThumbnail(
+  ref: OnshapePartRef,
+  size: string = '300x300'
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+  return onshapeRequestBuffer(
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}/s/${size}`
+  );
+}
+
+/**
+ * Sets a custom thumbnail for an element.
+ * Automatically extracts image dimensions from the provided image buffer.
+ * Endpoint: POST v10/thumbnails/d/{did}/w/{wid}/e/{eid}
+ */
+async function setElementThumbnail(
+  ref: OnshapeBomRef,
+  imageBuffer: Buffer,
+  mimeType: string = 'image/png'
+): Promise<void> {
+  const { documentID, wvmID, wvmType, elementID } = ref;
+  const { width, height } = getImageDimensions(imageBuffer);
+  const base64Image = imageBuffer.toString('base64');
+
+  await onshapeRequest(`/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}`, {
+    method: 'POST',
+    body: {
+      base64EncodedImage: base64Image,
+      mimeType,
+      size: `${width}x${height}`,
+      imageWidth: width,
+      imageHeight: height,
+    },
+  });
+}
+
+/**
+ * Sets a custom thumbnail for a part.
+ * Automatically extracts image dimensions from the provided image buffer.
+ * Endpoint: POST v10/thumbnails/d/{did}/w/{wid}/e/{eid}/p/{pid}
+ */
+async function setPartThumbnail(
+  ref: OnshapePartRef,
+  imageBuffer: Buffer,
+  mimeType: string = 'image/png'
+): Promise<void> {
+  const { documentID, wvmID, wvmType, elementID, partID } = ref;
+  const { width, height } = getImageDimensions(imageBuffer);
+  const base64Image = imageBuffer.toString('base64');
+
+  await onshapeRequest(
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}`,
+    {
+      method: 'POST',
+      body: {
+        base64EncodedImage: base64Image,
+        mimeType,
+        size: `${width}x${height}`,
+        imageWidth: width,
+        imageHeight: height,
+      },
+    }
+  );
+}
+
+/**
+ * Exports a part to STL format and returns the binary STL payload directly.
+ * Endpoint: GET v10/parts/d/{did}/{wvmType}/{wvmID}/e/{eid}/partid/{pid}/stl
+ */
+async function exportPartToStl(
+  ref: OnshapePartRef,
+  options: { units?: string; mode?: 'ascii' | 'binary' } = {}
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+  const { units = 'meter', mode = 'binary' } = options;
+
+  return onshapeRequestBuffer(
+    `/parts/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/partid/${partID}/stl`,
+    { query: { units, mode } }
+  );
+}
+
+/**
+ * Exports a part to Parasolid format (.x_t / .x_b) and returns the binary file payload directly.
+ * Endpoint: GET v10/parts/d/{did}/{wvmType}/{wvmID}/e/{eid}/partid/{pid}/parasolid
+ */
+async function exportPartToParasolid(
+  ref: OnshapePartRef,
+  options: { version?: number } = {}
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+
+  return onshapeRequestBuffer(
+    `/parts/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/partid/${partID}/parasolid`,
+    { query: options }
+  );
+}
+
+/**
+ * Exports a part to SolidWorks (.sldprt) format via Onshape's Translation API
+ * and returns the resulting file payload directly as a Buffer.
+ * Endpoint: POST v10/translations/d/{did}/{wvmType}/{wvmID}
+ */
+async function exportPartToSolidworks(ref: OnshapePartRef): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+
+  const translation = await onshapeRequest<{ id: string; requestState: string }>(
+    `/translations/d/${documentID}/${wvmType}/${wvmID}`,
+    {
+      method: 'POST',
+      body: {
+        formatName: 'SOLIDWORKS',
+        elementId: elementID,
+        partIds: partID,
+        storeInDocument: false,
+      },
+    }
+  );
+
+  let state = translation.requestState;
+  const translationId = translation.id;
+
+  while (state === 'ACTIVE' || state === 'PENDING') {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const status = await onshapeRequest<{ requestState: string }>(
+      `/translations/${translationId}`
+    );
+    state = status.requestState;
+    if (state === 'FAILED') {
+      throw new Error(`Onshape SolidWorks translation failed for part ${partID}`);
+    }
+  }
+
+  return onshapeRequestBuffer(`/translations/${translationId}/download`);
+}
+
 export default {
   checkConnection,
   getPart,
   updatePart,
   getBom,
+  getElementThumbnail,
+  getPartThumbnail,
+  setElementThumbnail,
+  setPartThumbnail,
+  exportPartToStl,
+  exportPartToParasolid,
+  exportPartToSolidworks,
+
 };
