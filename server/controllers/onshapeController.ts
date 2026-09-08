@@ -1,8 +1,8 @@
-import { Request, Response } from 'express';
+import { Request, Response } from "express";
 import onshapeService, {
   OnshapeApiError,
   UnsupportedOnshapeOperationError,
-} from '../services/onshapeService';
+} from "../services/onshapeService";
 
 interface OnshapePartParams {
   documentID: string;
@@ -32,12 +32,18 @@ interface OnshapeBomParams {
  *     since that genuinely means "couldn't get a good response from
  *     the upstream Onshape API."
  */
-function handleOnshapeError(res: Response, err: unknown, fallbackMessage: string): Response {
+function handleOnshapeError(
+  res: Response,
+  err: unknown,
+  fallbackMessage: string,
+): Response {
   if (err instanceof UnsupportedOnshapeOperationError) {
     return res.status(501).json({ message: err.message });
   }
   if (err instanceof OnshapeApiError) {
-    return res.status(err.status).json({ message: err.message, onshapeResponse: err.body });
+    return res
+      .status(err.status)
+      .json({ message: err.message, onshapeResponse: err.body });
   }
   const message = err instanceof Error ? err.message : String(err);
   return res.status(502).json({ message: fallbackMessage, error: message });
@@ -55,20 +61,20 @@ export async function getPart(req: Request<OnshapePartParams>, res: Response) {
     const part = await onshapeService.getPart(req.params);
     return res.status(200).json(part);
   } catch (err) {
-    return handleOnshapeError(res, err, 'Failed to fetch part from Onshape');
+    return handleOnshapeError(res, err, "Failed to fetch part from Onshape");
   }
 }
 
 /** POST /api/onshape/part/d/:documentID/wvmT/:wvmType/wvmI/:wvmID/e/:elementID/p/:partID */
 export async function updatePart(
   req: Request<OnshapePartParams, unknown, Record<string, unknown>>,
-  res: Response
+  res: Response,
 ) {
   try {
     const part = await onshapeService.updatePart(req.params, req.body);
     return res.status(200).json(part);
   } catch (err) {
-    return handleOnshapeError(res, err, 'Failed to update part in Onshape');
+    return handleOnshapeError(res, err, "Failed to update part in Onshape");
   }
 }
 
@@ -78,6 +84,8 @@ export async function getBom(req: Request<OnshapeBomParams>, res: Response) {
     const bom = await onshapeService.getBom(req.params);
     return res.status(200).json(bom);
   } catch (err) {
-    return handleOnshapeError(res, err, 'Failed to fetch bom from Onshape');
+    return handleOnshapeError(res, err, "Failed to fetch bom from Onshape");
+  }
+}
   }
 }
