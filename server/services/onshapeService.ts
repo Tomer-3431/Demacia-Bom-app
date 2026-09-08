@@ -650,4 +650,12 @@ export default {
   getPart,
   updatePart,
   getBom,
+  getElementThumbnail,
+  getPartThumbnail,
+  setElementThumbnail,
+  setPartThumbnail,
+  exportPartToStl,
+  exportPartToParasolid,
+  exportPartToSolidworks,
+
 };
