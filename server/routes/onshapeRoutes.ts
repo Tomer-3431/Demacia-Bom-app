@@ -10,7 +10,7 @@ const partPath =
 router.get(partPath, onshapeController.getPart);
 router.post(partPath, onshapeController.updatePart);
 
-const bomPath = "/bom/d/:documentID/wvmT/:wvmType/wvmI/:wvmID/e/:elemntID";
+const bomPath = "/bom/d/:documentID/wvmT/:wvmType/wvmI/:wvmID/e/:elementID";
 router.get(bomPath, onshapeController.getBom);
 
 router.get(`${partPath}/thumbnail/s/:size`, onshapeController.getPartThumbnail);
