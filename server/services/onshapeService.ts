@@ -574,6 +574,77 @@ async function setPartThumbnail(
   );
 }
 
+/**
+ * Exports a part to STL format and returns the binary STL payload directly.
+ * Endpoint: GET v10/parts/d/{did}/{wvmType}/{wvmID}/e/{eid}/partid/{pid}/stl
+ */
+async function exportPartToStl(
+  ref: OnshapePartRef,
+  options: { units?: string; mode?: 'ascii' | 'binary' } = {}
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+  const { units = 'meter', mode = 'binary' } = options;
+
+  return onshapeRequestBuffer(
+    `/parts/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/partid/${partID}/stl`,
+    { query: { units, mode } }
+  );
+}
+
+/**
+ * Exports a part to Parasolid format (.x_t / .x_b) and returns the binary file payload directly.
+ * Endpoint: GET v10/parts/d/{did}/{wvmType}/{wvmID}/e/{eid}/partid/{pid}/parasolid
+ */
+async function exportPartToParasolid(
+  ref: OnshapePartRef,
+  options: { version?: number } = {}
+): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+
+  return onshapeRequestBuffer(
+    `/parts/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/partid/${partID}/parasolid`,
+    { query: options }
+  );
+}
+
+/**
+ * Exports a part to SolidWorks (.sldprt) format via Onshape's Translation API
+ * and returns the resulting file payload directly as a Buffer.
+ * Endpoint: POST v10/translations/d/{did}/{wvmType}/{wvmID}
+ */
+async function exportPartToSolidworks(ref: OnshapePartRef): Promise<Buffer> {
+  const { documentID, wvmType, wvmID, elementID, partID } = ref;
+
+  const translation = await onshapeRequest<{ id: string; requestState: string }>(
+    `/translations/d/${documentID}/${wvmType}/${wvmID}`,
+    {
+      method: 'POST',
+      body: {
+        formatName: 'SOLIDWORKS',
+        elementId: elementID,
+        partIds: partID,
+        storeInDocument: false,
+      },
+    }
+  );
+
+  let state = translation.requestState;
+  const translationId = translation.id;
+
+  while (state === 'ACTIVE' || state === 'PENDING') {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const status = await onshapeRequest<{ requestState: string }>(
+      `/translations/${translationId}`
+    );
+    state = status.requestState;
+    if (state === 'FAILED') {
+      throw new Error(`Onshape SolidWorks translation failed for part ${partID}`);
+    }
+  }
+
+  return onshapeRequestBuffer(`/translations/${translationId}/download`);
+}
+
 export default {
   checkConnection,
   getPart,
