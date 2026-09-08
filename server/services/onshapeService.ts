@@ -415,6 +415,80 @@ async function getBom(
   );
 }
 
+/**
+ * Helper function for binary HTTP requests to Onshape API.
+ * Returns raw file data or image payload directly in its Buffer (blob) form.
+ */
+async function onshapeRequestBuffer(
+  path: string,
+  options: RequestOptions = {}
+): Promise<Buffer> {
+  const { method = 'GET', body, query } = options;
+  const url = buildUrl(path, query);
+
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Accept: '*/*',
+      ...(body !== undefined ? { 'Content-Type': 'application/json;charset=UTF-8' } : {}),
+      Authorization: authHeader(),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let parsed: unknown = text;
+    try {
+      parsed = JSON.parse(text);
+    } catch {}
+    throw new OnshapeApiError(
+      `Onshape API binary request failed: ${method} ${path} -> ${response.status}`,
+      response.status,
+      parsed
+    );
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Automatically inspects PNG or JPEG header bytes to determine image width and height.
+ */
+function getImageDimensions(buffer: Buffer): { width: number; height: number } {
+  // Check PNG magic bytes: 0x89 0x50 0x4E 0x47
+  if (
+    buffer.length >= 24 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    return { width, height };
+  }
+
+  // Check JPEG magic bytes: 0xFF 0xD8
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    while (offset < buffer.length) {
+      if (buffer[offset] !== 0xff) break;
+      const marker = buffer[offset + 1];
+      if (marker >= 0xc0 && marker <= 0xc2) {
+        const height = buffer.readUInt16BE(offset + 5);
+        const width = buffer.readUInt16BE(offset + 7);
+        return { width, height };
+      }
+      const blockLength = buffer.readUInt16BE(offset + 2);
+      offset += 2 + blockLength;
+    }
+  }
+
+  return { width: 300, height: 300 };
+}
+
 export default {
   checkConnection,
   getPart,
