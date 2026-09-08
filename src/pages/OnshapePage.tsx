@@ -1,12 +1,12 @@
 import type { FC } from "react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { 
-    useOnshapeContext, 
-    useOnshapeClient, 
-    useOnshapeKeepAlive, 
-    useOnshapeMessage, 
-    isSaveChangesMessage 
+import {
+    useOnshapeContext,
+    useOnshapeClient,
+    useOnshapeKeepAlive,
+    useOnshapeMessage,
+    isSaveChangesMessage
 } from '../util/OnshapeExtension';
 import '../css/Table.css';
 
@@ -114,7 +114,7 @@ const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
     console.log("[Onshape REST] Parsing raw Onshape BOM payload:", json);
     const bomTable = json.bomTable || json;
     const items = bomTable.items || json.items || [];
-    
+
     const parseItems = (itemList: any[]): RawBomNode[] => {
         return itemList.map((item, idx) => {
             const values = item.headerIdToValue || item.propertyValues || {};
@@ -150,7 +150,6 @@ const flattenBomTree = (
     const result: RowData[] = [];
     for (const node of nodes) {
         const id = counterRef.current++;
-        console.log(`[BOM Flatten] -> Mapping node raw ID [${node.id}] to internal ID [${id}], type: ${node.type}`);
         result.push({
             id,
             type: node.type,
@@ -173,7 +172,6 @@ const flattenBomTree = (
             group: node.group ?? (node.type === 'subassembly' ? 'Subassembly' : 'Unique part'),
         });
         if (node.children && node.children.length > 0) {
-            console.log(`[BOM Flatten] Found ${node.children.length} children for node internal ID [${id}]`);
             result.push(...flattenBomTree(node.children, id, counterRef));
         }
     }
@@ -181,8 +179,8 @@ const flattenBomTree = (
 };
 
 const exchangeCodeForAccessToken = async (
-    code: string, 
-    clientId: string, 
+    code: string,
+    clientId: string,
     clientSecret: string
 ): Promise<string | null> => {
     try {
@@ -195,12 +193,9 @@ const exchangeCodeForAccessToken = async (
             redirect_uri: 'https://localhost:5173'
         });
 
-        console.log("[OAuth] Exchanging authorization code for access token...");
         const response = await fetch(tokenEndpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: params.toString()
         });
 
@@ -210,7 +205,6 @@ const exchangeCodeForAccessToken = async (
         }
 
         const data = await response.json();
-        console.log("[OAuth] Successfully retrieved access_token!");
         return data.access_token;
     } catch (err) {
         console.error("[OAuth Error]", err);
@@ -219,7 +213,6 @@ const exchangeCodeForAccessToken = async (
 };
 
 export const OnshapePage: FC = () => {
-    console.log("[Render] OnshapePage component rendering/re-rendering");
     const [searchParams] = useSearchParams();
 
     const context = useOnshapeContext();
@@ -229,7 +222,6 @@ export const OnshapePage: FC = () => {
 
     useOnshapeMessage(client, (message) => {
         if (isSaveChangesMessage(message)) {
-            console.log("[Onshape] Save changes requested by host.");
             client.finishedSaving(message.messageId);
         }
     });
@@ -280,7 +272,6 @@ export const OnshapePage: FC = () => {
     const hasFetchedRef = useRef(false);
 
     const fetchParts = useCallback(async (signal?: AbortSignal) => {
-        console.log("[API] Initiating live assembly component fetch:", { docId, wvmType, wvmId, elementId });
         setLoading(true);
         setError(null);
 
@@ -295,7 +286,6 @@ export const OnshapePage: FC = () => {
 
             try {
                 const proxyUrl = `${API_BASE}/api/onshape/bom/d/${docId}/wvmT/${wvmType}/wvmI/${wvmId}/e/${elementId}`;
-                console.log(`[API Proxy] Querying backend route: ${proxyUrl}`);
                 res = await fetch(proxyUrl, { signal });
             } catch (proxyErr) {
                 console.warn("[API Proxy] Backend server unreachable. Retrying via direct Onshape REST API.");
@@ -304,8 +294,6 @@ export const OnshapePage: FC = () => {
             if (!res || !res.ok) {
                 const targetOnshapeApi = `https://cad.onshape.com/api/v2/assemblies/d/${docId}/${wvmType}/${wvmId}/e/${elementId}/bom?indented=true`;
                 const directOnshapeUrl = `https://corsproxy.io/?${encodeURIComponent(targetOnshapeApi)}`;
-
-                console.log(`[Onshape Direct REST] Fetching assembly components via CORS proxy: ${directOnshapeUrl}`);
 
                 const headers: Record<string, string> = {
                     'Accept': 'application/vnd.onshape.v2+json'
@@ -321,10 +309,7 @@ export const OnshapePage: FC = () => {
                     headers['Authorization'] = authToken;
                 }
 
-                res = await fetch(directOnshapeUrl, {
-                    signal,
-                    headers
-                });
+                res = await fetch(directOnshapeUrl, { signal, headers });
             }
 
             if (!res.ok) {
@@ -333,10 +318,6 @@ export const OnshapePage: FC = () => {
 
             const json = await res.json();
             const rawNodes = parseOnshapeBomResponse(json);
-
-            if (rawNodes.length === 0) {
-                console.warn("[Onshape REST] No items found in response payload.");
-            }
 
             const counterRef = { current: 1 };
             const flattened = flattenBomTree(rawNodes, null, counterRef);
@@ -369,15 +350,9 @@ export const OnshapePage: FC = () => {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                console.log("[Keyboard] Escape key pressed. Closing all context menus.");
-                closeContextMenu();
-            }
+            if (e.key === 'Escape') closeContextMenu();
         };
-        const handleScroll = () => {
-            console.log("[Scroll] Window scroll detected. Closing context menus.");
-            closeContextMenu();
-        };
+        const handleScroll = () => closeContextMenu();
 
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('scroll', handleScroll, true);
@@ -502,11 +477,14 @@ export const OnshapePage: FC = () => {
         const initialWidth = colElement ? colElement.getBoundingClientRect().width : th.getBoundingClientRect().width;
         const startX = e.clientX;
         const wrapper = th.closest('.table-wrapper') as HTMLElement;
-        
+
         let currentWidth = initialWidth;
         let latestClientX = startX;
         let isActive = true;
         let rafId: number | null = null;
+
+        const EDGE_ZONE = 40;
+        const MAX_EDGE_SPEED = 40;
 
         const targetElement = e.target as HTMLElement;
         targetElement.setPointerCapture(e.pointerId);
@@ -519,8 +497,35 @@ export const OnshapePage: FC = () => {
 
         const tick = () => {
             if (!isActive) return;
+
             const rawDelta = latestClientX - startX;
-            applyWidth(initialWidth + rawDelta);
+            const absDelta = Math.abs(rawDelta);
+            const isShrinking = rawDelta < 0;
+
+            const speedMultiplier = 1 + (absDelta * 0.015);
+            const scaledDelta = rawDelta * speedMultiplier;
+
+            applyWidth(initialWidth + scaledDelta);
+
+            const distanceIntoRightEdge = latestClientX - (window.innerWidth - EDGE_ZONE);
+            if (distanceIntoRightEdge > 0) {
+                const growth = Math.min(MAX_EDGE_SPEED, (distanceIntoRightEdge / EDGE_ZONE) * MAX_EDGE_SPEED);
+                applyWidth(currentWidth + growth);
+                if (wrapper) wrapper.scrollLeft += growth * 1.5;
+            } else if (latestClientX <= EDGE_ZONE) {
+                const distanceIntoLeftEdge = EDGE_ZONE - latestClientX;
+                const shrink = Math.min(MAX_EDGE_SPEED, (distanceIntoLeftEdge / EDGE_ZONE) * MAX_EDGE_SPEED);
+                applyWidth(currentWidth - shrink);
+            }
+
+            if (wrapper && !isShrinking) {
+                const wrapperRect = wrapper.getBoundingClientRect();
+                if (latestClientX > wrapperRect.right - 100) {
+                    const scrollPush = Math.max(5, (latestClientX - (wrapperRect.right - 100)) * 0.8);
+                    wrapper.scrollLeft += scrollPush;
+                }
+            }
+
             rafId = requestAnimationFrame(tick);
         };
 
@@ -561,7 +566,7 @@ export const OnshapePage: FC = () => {
             documentUrl: '', material: '', mass: 0, price: 0, manufacturingMethod: '', producer: '',
             comments: '', group: type === 'subassembly' ? 'Subassembly' : 'Unique part'
         };
-        
+
         setData(prev => {
             let newData = [...prev, newRow];
             if (parentId !== null) {
@@ -669,7 +674,7 @@ export const OnshapePage: FC = () => {
         if (rowContextMenu.rowId !== null) {
             const idsToDelete = new Set<number>();
             const queue = [rowContextMenu.rowId];
-            while(queue.length > 0) {
+            while (queue.length > 0) {
                 const currentId = queue.shift()!;
                 idsToDelete.add(currentId);
                 data.forEach(row => { if (row.parentId === currentId) queue.push(row.id); });
@@ -680,7 +685,7 @@ export const OnshapePage: FC = () => {
     };
 
     const getStatusClass = (status: string) => {
-        switch(status) {
+        switch (status) {
             case 'Not Started': return 'status-bg-gray';
             case 'In Design': return 'status-bg-purple';
             case 'In Review': return 'status-bg-blue';
@@ -695,67 +700,111 @@ export const OnshapePage: FC = () => {
         }
     };
 
+    const shortId = (v?: string) => (v ? `${v.slice(0, 8)}…` : '—');
+
     return (
-        <div className="table-page-container" onClick={closeContextMenu} style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' }}>
-            
-            {/* Header Toolbar - Fully Responsive */}
-            <div style={{ padding: '8px 12px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>BOM Table</h3>
-                        <span style={{ fontSize: '11px', color: '#64748b', background: '#e2e8f0', padding: '2px 6px', borderRadius: '10px' }}>
-                            {data.length} items
+        <div className="table-page-container" onClick={closeContextMenu} style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden', background: '#f8fafc' }}>
+
+            {/* Header */}
+            <div style={{
+                padding: '14px 20px',
+                background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+                borderBottom: '1px solid #e2e8f0',
+                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+                flexShrink: 0
+            }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', minWidth: 0 }}>
+                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                            Bill of Materials
+                        </h2>
+                        <span style={{
+                            fontSize: '12px', fontWeight: 600, color: '#2563eb', background: '#eff6ff',
+                            border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '999px'
+                        }}>
+                            {data.length} {data.length === 1 ? 'item' : 'items'}
                         </span>
+                        {!error && !loading && (
+                            <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 500 }}>● Live</span>
+                        )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <button onClick={() => handleAddRow('part')} style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button
+                            onClick={() => handleAddRow('part')}
+                            style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', transition: 'background 0.15s' }}
+                        >
                             + Part
                         </button>
-                        <button onClick={() => handleAddRow('subassembly')} style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                        <button
+                            onClick={() => handleAddRow('subassembly')}
+                            style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                        >
                             + Subassembly
                         </button>
-                        <button onClick={() => { hasFetchedRef.current = false; fetchParts(); }} style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                        <button
+                            onClick={() => { hasFetchedRef.current = false; fetchParts(); }}
+                            title="Refresh"
+                            style={{ padding: '6px 10px', fontSize: '13px', cursor: 'pointer', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                        >
                             ↻
                         </button>
-                        <button onClick={() => setShowSettings(!showSettings)} style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer', background: showSettings ? '#e2e8f0' : 'transparent', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                        <button
+                            onClick={() => setShowSettings(!showSettings)}
+                            title="Settings"
+                            style={{ padding: '6px 10px', fontSize: '13px', cursor: 'pointer', background: showSettings ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                        >
                             ⚙
                         </button>
                     </div>
                 </div>
 
-                {/* Collapsible Settings / Key Bar */}
+                {/* Metadata strip */}
+                <div style={{
+                    marginTop: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap', fontSize: '11px',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#64748b'
+                }}>
+                    <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>doc: {shortId(docId ?? undefined)}</span>
+                    <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>{workspaceOrVersion}: {shortId(workspaceOrVersionId ?? undefined)}</span>
+                    <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>elem: {shortId(elementId ?? undefined)}</span>
+                    {microversionId && (
+                        <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>mid: {shortId(microversionId)}</span>
+                    )}
+                </div>
+
+                {/* Settings panel */}
                 {showSettings && (
-                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #cbd5e1', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input 
-                            type="password" 
-                            placeholder="API Key (ACCESS_KEY:SECRET_KEY)" 
+                    <div style={{
+                        marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1',
+                        display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'
+                    }}>
+                        <input
+                            type="password"
+                            placeholder="API Key (ACCESS_KEY:SECRET_KEY)"
                             value={apiToken}
                             onChange={(e) => handleSaveToken(e.target.value)}
-                            style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '4px', flex: '1 1 200px', maxWidth: '100%' }}
+                            style={{ padding: '6px 10px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px', flex: '1 1 240px', maxWidth: '100%' }}
                         />
-                        <div style={{ fontSize: '10px', color: '#64748b', wordBreak: 'break-all' }}>
-                            doc:{docId?.slice(0,6)}.. | element:{elementId?.slice(0,6)}..
-                        </div>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>Used as a fallback when the backend proxy is unreachable.</span>
                     </div>
                 )}
             </div>
 
-            {/* Error Notification */}
+            {/* Error */}
             {error && (
-                <div style={{ padding: '8px 12px', color: '#991b1b', background: '#fef2f2', borderBottom: '1px solid #fecaca', fontSize: '12px', flexShrink: 0 }}>
+                <div style={{ padding: '10px 20px', color: '#991b1b', background: '#fef2f2', borderBottom: '1px solid #fecaca', fontSize: '13px', flexShrink: 0 }}>
                     <strong>Error:</strong> {error}
                 </div>
             )}
 
-            {/* Loading Indicator */}
+            {/* Loading */}
             {loading && (
-                <div style={{ padding: '12px', fontSize: '13px', color: '#475569', flexShrink: 0 }}>
-                    Fetching live assembly components...
+                <div style={{ padding: '12px 20px', fontSize: '13px', color: '#475569', flexShrink: 0 }}>
+                    Fetching live assembly components…
                 </div>
             )}
 
-            {/* Scrollable BOM Grid */}
+            {/* Grid */}
             <div className="table-wrapper" ref={wrapperRef} style={{ flex: 1, overflow: 'auto', width: '100%' }}>
                 <table className="custom-table" style={{ minWidth: '100%' }}>
                     <colgroup>
@@ -782,7 +831,7 @@ export const OnshapePage: FC = () => {
                                         <span className="th-text">{col.label}</span>
                                         <div className="grid-drag-handle" draggable onMouseDown={() => setIsHandleDragging(true)} onMouseUp={() => setIsHandleDragging(false)}>⋮⋮</div>
                                     </div>
-                                    <div 
+                                    <div
                                         className="col-resize-handle"
                                         onPointerDown={(e) => handleResizeStart(e, col.key)}
                                         onDoubleClick={(e) => handleResizeDoubleClick(e, col.key, col.label)}
@@ -891,13 +940,13 @@ export const OnshapePage: FC = () => {
                 </table>
             </div>
 
-            {/* Context Menus */}
+            {/* Context menus */}
             {contextMenu.visible && (
                 <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x, position: 'fixed', zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => { if (contextMenu.columnIndex > 0) moveColumn(contextMenu.columnIndex, contextMenu.columnIndex - 1); closeContextMenu(); }} disabled={contextMenu.columnIndex === 0}>Move Left</button>
                     <button onClick={() => { if (contextMenu.columnIndex < columns.length - 1) moveColumn(contextMenu.columnIndex, contextMenu.columnIndex + 1); closeContextMenu(); }} disabled={contextMenu.columnIndex === columns.length - 1}>Move Right</button>
                 </div>
-            )} 
+            )}
             {rowContextMenu.visible && activeContextMenuRow && (
                 <div className="context-menu" style={{ top: rowContextMenu.y, left: rowContextMenu.x, position: 'fixed', zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
                     {activeContextMenuRow.type === 'subassembly' && (
