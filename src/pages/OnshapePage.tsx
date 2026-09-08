@@ -113,26 +113,26 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5050';
 const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
     console.log("[Onshape REST] Parsing raw Onshape BOM payload:", json);
     const bomTable = json.bomTable || json;
-    const items = bomTable.items || json.items || [];
+    const items = bomTable.items || json.items || (Array.isArray(json) ? json : []);
 
     const parseItems = (itemList: any[]): RawBomNode[] => {
         return itemList.map((item, idx) => {
             const values = item.headerIdToValue || item.propertyValues || {};
-            const name = values.name || values.Name || item.name || `Part ${idx + 1}`;
+            const name = values.name || values.Name || item.name || item.partName || `Part ${idx + 1}`;
             const hasChildren = Boolean(item.children && item.children.length > 0);
 
             return {
                 id: item.id || `onshape_item_${idx}_${Math.random()}`,
-                type: hasChildren ? 'subassembly' : 'part',
+                type: item.type || (hasChildren ? 'subassembly' : 'part'),
                 partName: String(name),
-                partId: String(values.partNumber || values.PartNumber || values.itemCode || ''),
-                revision: Number(values.revision || values.Revision || 1),
-                quantity: values.quantity || values.Quantity || 1,
-                material: typeof values.material === 'object' ? (values.material?.displayName || '') : String(values.material || ''),
-                mass: values.mass || values.Mass || 0,
-                manufacturingStatus: String(values.state || values.status || 'In Design'),
-                manufacturingMethod: String(values.vendor || values.mfgMethod || ''),
-                comments: String(values.description || values.note || ''),
+                partId: String(values.partNumber || values.PartNumber || values.itemCode || item.partId || ''),
+                revision: Number(values.revision || values.Revision || item.revision || 1),
+                quantity: values.quantity || values.Quantity || item.quantity || 1,
+                material: typeof values.material === 'object' ? (values.material?.displayName || '') : String(values.material || item.material || ''),
+                mass: values.mass || values.Mass || item.mass || 0,
+                manufacturingStatus: String(values.state || values.status || item.manufacturingStatus || 'In Design'),
+                manufacturingMethod: String(values.vendor || values.mfgMethod || item.manufacturingMethod || ''),
+                comments: String(values.description || values.note || item.comments || ''),
                 children: item.children ? parseItems(item.children) : []
             };
         });
@@ -150,6 +150,7 @@ const flattenBomTree = (
     const result: RowData[] = [];
     for (const node of nodes) {
         const id = counterRef.current++;
+        console.log(`[BOM Flatten] -> Mapping node raw ID [${node.id}] to internal ID [${id}], type: ${node.type}`);
         result.push({
             id,
             type: node.type,
@@ -172,47 +173,15 @@ const flattenBomTree = (
             group: node.group ?? (node.type === 'subassembly' ? 'Subassembly' : 'Unique part'),
         });
         if (node.children && node.children.length > 0) {
+            console.log(`[BOM Flatten] Found ${node.children.length} children for node internal ID [${id}]`);
             result.push(...flattenBomTree(node.children, id, counterRef));
         }
     }
     return result;
 };
 
-const exchangeCodeForAccessToken = async (
-    code: string,
-    clientId: string,
-    clientSecret: string
-): Promise<string | null> => {
-    try {
-        const tokenEndpoint = `https://corsproxy.io/?${encodeURIComponent('https://oauth.onshape.com/oauth/token')}`;
-        const params = new URLSearchParams({
-            grant_type: 'authorization_code',
-            code: code,
-            client_id: clientId,
-            client_secret: clientSecret,
-            redirect_uri: 'https://localhost:5173'
-        });
-
-        const response = await fetch(tokenEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: params.toString()
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Token exchange failed (${response.status}): ${errText}`);
-        }
-
-        const data = await response.json();
-        return data.access_token;
-    } catch (err) {
-        console.error("[OAuth Error]", err);
-        return null;
-    }
-};
-
 export const OnshapePage: FC = () => {
+    console.log("[Render] OnshapePage component rendering/re-rendering");
     const [searchParams] = useSearchParams();
 
     const context = useOnshapeContext();
@@ -222,32 +191,33 @@ export const OnshapePage: FC = () => {
 
     useOnshapeMessage(client, (message) => {
         if (isSaveChangesMessage(message)) {
+            console.log("[Onshape] Save changes requested by host.");
             client.finishedSaving(message.messageId);
         }
     });
 
-    const docId = context.documentId;
-    const wvmType = context.workspaceId ? 'w' : context.versionId ? 'v' : 'w';
-    const wvmId = context.workspaceId || context.versionId;
-    const workspaceOrVersion = wvmType;
-    const workspaceOrVersionId = wvmId;
+    const workspaceOrVersion = context.workspaceId ? 'w' : context.versionId ? 'v' : (searchParams.get('wv') || 'w');
+    const workspaceOrVersionId = context.workspaceId || context.versionId || searchParams.get('wvid');
     const microversionId = context.microversionId || searchParams.get('mid') || '';
-    const elementId = context.elementId;
+
+    const docId = context.documentId || searchParams.get('documentId') || searchParams.get('did') || searchParams.get('d');
+    const wvmType = workspaceOrVersion;
+    const wvmId = workspaceOrVersionId;
+    const elementId = context.elementId || searchParams.get('elementId') || searchParams.get('eid') || searchParams.get('e');
 
     const [data, setData] = useState<RowData[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    const [apiToken, setApiToken] = useState<string>(localStorage.getItem('ONSHAPE_API_TOKEN') || '');
-    const [showSettings, setShowSettings] = useState<boolean>(false);
 
     const [columns, setColumns] = useState<ColumnConfig[]>([
-        { key: 'partName', label: 'Part Name', type: 'string' },
-        { key: 'partId', label: 'Part ID', type: 'string' },
-        { key: 'quantity', label: 'Qty', type: 'number' },
-        { key: 'manufacturingStatus', label: 'Manufacturing status', type: 'select', options: PART_STATUS_OPTIONS },
-        { key: 'revision', label: 'Revision', type: 'number' },
         { key: 'projectName', label: 'Project Name', type: 'string' },
+        { key: 'manufacturingStatus', label: 'Manufacturing status', type: 'select', options: PART_STATUS_OPTIONS },
+        { key: 'partId', label: 'Part ID', type: 'string' },
+        { key: 'revision', label: 'Revision', type: 'number' },
+        { key: 'partName', label: 'Part Name', type: 'string' },
         { key: 'whereUsed', label: 'Where Used', type: 'string' },
+        { key: 'quantity', label: 'Qty', type: 'number' },
+        { key: 'documentUrl', label: 'Document URl', type: 'string' },
         { key: 'material', label: 'Material', type: 'string' },
         { key: 'mass', label: 'Mass', type: 'number' },
         { key: 'price', label: 'Price ($)', type: 'number' },
@@ -255,7 +225,6 @@ export const OnshapePage: FC = () => {
         { key: 'producer', label: 'Producer', type: 'string' },
         { key: 'comments', label: 'Comments', type: 'string' },
         { key: 'group', label: 'Group', type: 'select', options: GROUP_OPTIONS },
-        { key: 'documentUrl', label: 'Document URL', type: 'string' },
     ]);
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
@@ -272,35 +241,39 @@ export const OnshapePage: FC = () => {
     const hasFetchedRef = useRef(false);
 
     const fetchParts = useCallback(async (signal?: AbortSignal) => {
+        console.log("[API] fetchParts initiated", { docId, wvmType, wvmId, elementId });
         setLoading(true);
         setError(null);
-
-        if (!docId || !wvmId || !elementId) {
-            setError("Missing active Onshape Assembly parameters (Document, Workspace/Version, or Element ID).");
-            setLoading(false);
-            return;
-        }
 
         try {
             let res: Response | null = null;
 
+            // Attempt 1: Fetch through backend proxy server on port 5050
             try {
-                const proxyUrl = `${API_BASE}/api/onshape/bom/d/${docId}/wvmT/${wvmType}/wvmI/${wvmId}/e/${elementId}`;
-                res = await fetch(proxyUrl, { signal });
+                let targetUrl = `${API_BASE}/api/db/bom/all`;
+                if (docId && wvmType && wvmId && elementId) {
+                    targetUrl = `${API_BASE}/api/onshape/bom/d/${docId}/wvmT/${wvmType}/wvmI/${wvmId}/e/${elementId}`;
+                }
+                console.log(`[API Proxy] Querying backend route: ${targetUrl}`);
+                res = await fetch(targetUrl, { signal });
             } catch (proxyErr) {
                 console.warn("[API Proxy] Backend server unreachable. Retrying via direct Onshape REST API.");
             }
 
-            if (!res || !res.ok) {
+            // Attempt 2: Direct Onshape REST API Call via CORS proxy wrapper
+            if ((!res || !res.ok) && docId && wvmType && wvmId && elementId) {
                 const targetOnshapeApi = `https://cad.onshape.com/api/v2/assemblies/d/${docId}/${wvmType}/${wvmId}/e/${elementId}/bom?indented=true`;
                 const directOnshapeUrl = `https://corsproxy.io/?${encodeURIComponent(targetOnshapeApi)}`;
+
+                console.log(`[Onshape Direct REST] Fetching assembly components via CORS proxy: ${directOnshapeUrl}`);
 
                 const headers: Record<string, string> = {
                     'Accept': 'application/vnd.onshape.v2+json'
                 };
 
-                if (apiToken) {
-                    let authToken = apiToken.trim();
+                const storedToken = localStorage.getItem('ONSHAPE_API_TOKEN');
+                if (storedToken) {
+                    let authToken = storedToken.trim();
                     if (authToken.includes(':') && !authToken.startsWith('Basic ')) {
                         authToken = `Basic ${btoa(authToken)}`;
                     } else if (!authToken.startsWith('Basic ') && !authToken.startsWith('Bearer ')) {
@@ -309,11 +282,21 @@ export const OnshapePage: FC = () => {
                     headers['Authorization'] = authToken;
                 }
 
-                res = await fetch(directOnshapeUrl, { signal, headers });
+                res = await fetch(directOnshapeUrl, {
+                    signal,
+                    headers
+                });
             }
 
-            if (!res.ok) {
-                throw new Error(`Onshape API returned status ${res.status} (${res.statusText}). Verify active document permissions or API token.`);
+            // Attempt 3: General DB Fallback
+            if (!res || !res.ok) {
+                const dbUrl = `${API_BASE}/api/db/bom/all`;
+                console.log(`[API DB Fallback] Querying DB route: ${dbUrl}`);
+                res = await fetch(dbUrl, { signal });
+            }
+
+            if (!res || !res.ok) {
+                throw new Error(`Server or Onshape API returned status ${res?.status || 'Error'}. Verify active document permissions or API token.`);
             }
 
             const json = await res.json();
@@ -324,13 +307,13 @@ export const OnshapePage: FC = () => {
             setData(flattened);
         } catch (err) {
             if (err instanceof Error && err.name !== 'AbortError') {
-                console.error("[API Error] Failed to fetch real assembly parts:", err.message);
+                console.error("[API Error] Failed to fetch parts:", err.message);
                 setError(err.message);
             }
         } finally {
             setLoading(false);
         }
-    }, [docId, wvmType, wvmId, elementId, apiToken]);
+    }, [docId, wvmType, wvmId, elementId]);
 
     useEffect(() => {
         if (hasFetchedRef.current) return;
@@ -341,18 +324,17 @@ export const OnshapePage: FC = () => {
         return () => controller.abort();
     }, [fetchParts]);
 
-    const handleSaveToken = (newToken: string) => {
-        setApiToken(newToken);
-        localStorage.setItem('ONSHAPE_API_TOKEN', newToken);
-        hasFetchedRef.current = false;
-        fetchParts();
-    };
-
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') closeContextMenu();
+            if (e.key === 'Escape') {
+                console.log("[Keyboard] Escape key pressed. Closing all context menus.");
+                closeContextMenu();
+            }
         };
-        const handleScroll = () => closeContextMenu();
+        const handleScroll = () => {
+            console.log("[Scroll] Window scroll detected. Closing context menus.");
+            closeContextMenu();
+        };
 
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('scroll', handleScroll, true);
@@ -363,20 +345,26 @@ export const OnshapePage: FC = () => {
     }, []);
 
     const hasPurchasedParts = data.some(row => row.manufacturingMethod === 'Purchased externally');
+    console.log(`[Columns] hasPurchasedParts evaluated to: ${hasPurchasedParts}`);
     const visibleColumns = columns.filter(col => col.key !== 'producer' || hasPurchasedParts);
 
     useEffect(() => {
         const wrapper = wrapperRef.current;
-        if (!wrapper) return;
+        if (!wrapper) {
+            console.log("[ResizeObserver] wrapperRef is currently null.");
+            return;
+        }
 
         const lastCol = visibleColumns[visibleColumns.length - 1];
         if (!lastCol) {
+            console.log("[ResizeObserver] No visible columns available for auto-width calculation.");
             setAutoLastColWidth(null);
             return;
         }
 
         const recompute = () => {
             if (Object.prototype.hasOwnProperty.call(columnWidths, lastCol.key)) {
+                console.log(`[ResizeObserver] Last column [${lastCol.key}] has a custom user width set. Skipping auto calculation.`);
                 setAutoLastColWidth(null);
                 return;
             }
@@ -387,6 +375,7 @@ export const OnshapePage: FC = () => {
 
             const available = wrapper.clientWidth - othersWidth;
             const computedWidth = Math.max(MIN_LAST_COL_WIDTH, available);
+            console.log(`[ResizeObserver] Recomputed last column width: ${computedWidth}px (Wrapper width: ${wrapper.clientWidth}px, Others: ${othersWidth}px)`);
             setAutoLastColWidth(computedWidth);
         };
 
@@ -413,9 +402,12 @@ export const OnshapePage: FC = () => {
     };
 
     const visibleData = getVisibleData();
+    console.log(`[Render Tree] Render tree generated. Total visible rows: ${visibleData.length} out of ${data.length} total rows.`);
+
     const activeContextMenuRow = data.find(r => r.id === rowContextMenu.rowId);
 
     const focusNextAvailableCell = (rIdx: number, cIdx: number, dRow: number, dCol: number) => {
+        console.log(`[Navigation] Attempting to move focus from row ${rIdx}, col ${cIdx} by offset [row: ${dRow}, col: ${dCol}]`);
         let targetRow = rIdx;
         let targetCol = cIdx;
 
@@ -423,10 +415,18 @@ export const OnshapePage: FC = () => {
             targetRow += dRow;
             targetCol += dCol;
 
-            if (targetRow < 0 || targetRow >= visibleData.length || targetCol < 0 || targetCol >= visibleColumns.length) break;
+            if (targetRow < 0 || targetRow >= visibleData.length) {
+                console.log(`[Navigation] Target row ${targetRow} is out of bounds (max: ${visibleData.length - 1}). Stopping search.`);
+                break;
+            }
+            if (targetCol < 0 || targetCol >= visibleColumns.length) {
+                console.log(`[Navigation] Target column ${targetCol} is out of bounds (max: ${visibleColumns.length - 1}). Stopping search.`);
+                break;
+            }
 
             const cellElement = document.querySelector(`[data-row="${targetRow}"][data-col="${targetCol}"]`) as HTMLInputElement | HTMLSelectElement;
             if (cellElement && !cellElement.disabled) {
+                console.log(`[Navigation] Found active target cell at row ${targetRow}, col ${targetCol}. Focusing.`);
                 cellElement.focus();
                 if (cellElement instanceof HTMLInputElement) {
                     if (dCol === 1) cellElement.setSelectionRange(0, 0);
@@ -434,6 +434,8 @@ export const OnshapePage: FC = () => {
                     else cellElement.select();
                 }
                 break;
+            } else {
+                console.log(`[Navigation] Cell at row ${targetRow}, col ${targetCol} is disabled or missing. Continuing search vector.`);
             }
         }
     };
@@ -451,24 +453,37 @@ export const OnshapePage: FC = () => {
 
         if (isUp || isDown) {
             e.preventDefault();
-            focusNextAvailableCell(rowIndex, colIndex, isUp ? -1 : 1, 0);
-        } else if (isLeft && (isCtrl || (isInput && input.selectionStart === 0 && input.selectionEnd === 0))) {
-            e.preventDefault();
-            focusNextAvailableCell(rowIndex, colIndex, 0, -1);
-        } else if (isRight && (isCtrl || (isInput && input.selectionStart === input.value.length && input.selectionEnd === input.value.length))) {
-            e.preventDefault();
-            focusNextAvailableCell(rowIndex, colIndex, 0, 1);
+            console.log(`[Keydown] Vertical arrow pressed (${e.key}) at row ${rowIndex}, col ${colIndex}`);
+            const dRow = isUp ? -1 : 1;
+            focusNextAvailableCell(rowIndex, colIndex, dRow, 0);
+        } else if (isLeft) {
+            if (isCtrl || (isInput && input.selectionStart === 0 && input.selectionEnd === 0)) {
+                e.preventDefault();
+                console.log(`[Keydown] Left arrow navigation triggered at row ${rowIndex}, col ${colIndex} (Ctrl: ${isCtrl})`);
+                focusNextAvailableCell(rowIndex, colIndex, 0, -1);
+            }
+        } else if (isRight) {
+            if (isCtrl || (isInput && input.selectionStart === input.value.length && input.selectionEnd === input.value.length)) {
+                e.preventDefault();
+                console.log(`[Keydown] Right arrow navigation triggered at row ${rowIndex}, col ${colIndex} (Ctrl: ${isCtrl})`);
+                focusNextAvailableCell(rowIndex, colIndex, 0, 1);
+            }
         } else if (e.key === 'Enter') {
+            console.log(`[Keydown] Enter key pressed at row ${rowIndex}, col ${colIndex}. Blurring element.`);
             target.blur();
         }
     };
 
     const handleResizeStart = (e: React.PointerEvent, key: string) => {
+        console.log(`[Resize] Pointer down on resize handle for column: [${key}]`);
         e.stopPropagation();
         e.preventDefault();
 
         const th = (e.target as HTMLElement).closest('th');
-        if (!th) return;
+        if (!th) {
+            console.warn("[Resize Warning] Could not locate parent <th> element for resize handle.");
+            return;
+        }
 
         const table = th.closest('table');
         const colIndex = Array.from(th.parentNode?.children || []).indexOf(th);
@@ -488,6 +503,7 @@ export const OnshapePage: FC = () => {
 
         const targetElement = e.target as HTMLElement;
         targetElement.setPointerCapture(e.pointerId);
+        console.log(`[Resize] Pointer capture successfully acquired for pointer ID ${e.pointerId}`);
 
         const applyWidth = (w: number) => {
             currentWidth = Math.max(60, w);
@@ -529,16 +545,23 @@ export const OnshapePage: FC = () => {
             rafId = requestAnimationFrame(tick);
         };
 
-        const onPointerMove = (moveEvent: PointerEvent) => { latestClientX = moveEvent.clientX; };
+        const onPointerMove = (moveEvent: PointerEvent) => {
+            latestClientX = moveEvent.clientX;
+        };
 
         const onPointerUp = (upEvent: PointerEvent) => {
+            console.log(`[Resize] Pointer up received. Final width for [${key}]: ${currentWidth}px`);
             isActive = false;
             if (rafId !== null) cancelAnimationFrame(rafId);
             targetElement.releasePointerCapture(upEvent.pointerId);
             targetElement.removeEventListener('pointermove', onPointerMove);
             targetElement.removeEventListener('pointerup', onPointerUp);
 
-            setColumnWidths(prev => ({ ...prev, [key]: currentWidth }));
+            setColumnWidths(prev => {
+                const updated = { ...prev, [key]: currentWidth };
+                console.log("[Resize] Updated columnWidths state map:", updated);
+                return updated;
+            });
         };
 
         targetElement.addEventListener('pointermove', onPointerMove);
@@ -547,6 +570,7 @@ export const OnshapePage: FC = () => {
     };
 
     const handleResizeDoubleClick = (e: React.MouseEvent, key: string, label: string) => {
+        console.log(`[Resize DoubleClick] Auto-fitting column [${key}] ("${label}")`);
         e.stopPropagation();
         let maxChars = label.length;
         visibleData.forEach(row => {
@@ -555,10 +579,14 @@ export const OnshapePage: FC = () => {
             const indentChars = (visibleColumns[0].key === key ? row.level * 3 : 0);
             maxChars = Math.max(maxChars, str.length + indentChars);
         });
-        setColumnWidths(prev => ({ ...prev, [key]: Math.max(70, Math.ceil((maxChars * 7.5) + 32)) }));
+
+        const tightFitWidth = Math.ceil((maxChars * 7.5) + 32);
+        console.log(`[Resize DoubleClick] Calculated tight fit width for [${key}]: ${tightFitWidth}px`);
+        setColumnWidths(prev => ({ ...prev, [key]: Math.max(70, tightFitWidth) }));
     };
 
     const handleAddRow = (type: 'part' | 'subassembly', parentId: number | null = null) => {
+        console.log(`[Add Row] Triggered to add new [${type}] with parentId: ${parentId}`);
         const newId = data.length > 0 ? Math.max(...data.map(row => row.id)) + 1 : 1;
         const newRow: RowData = {
             id: newId, type, parentId, isExpanded: true, projectName: '', manufacturingStatus: 'Not Started',
@@ -570,8 +598,10 @@ export const OnshapePage: FC = () => {
         setData(prev => {
             let newData = [...prev, newRow];
             if (parentId !== null) {
+                console.log(`[Add Row] Expanding parent row ID [${parentId}] to show newly added child.`);
                 newData = newData.map(row => row.id === parentId ? { ...row, isExpanded: true } : row);
             }
+            console.log("[Add Row] New data state length after insertion:", newData.length);
             return newData;
         });
         closeContextMenu();
@@ -579,11 +609,21 @@ export const OnshapePage: FC = () => {
 
     const toggleExpand = (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
-        setData(prev => prev.map(row => row.id === id ? { ...row, isExpanded: !row.isExpanded } : row));
+        setData(prev => {
+            const target = prev.find(r => r.id === id);
+            const newState = target ? !target.isExpanded : true;
+            console.log(`[Toggle Expand] Toggling row ID [${id}]. New isExpanded state: ${newState}`);
+            return prev.map(row => row.id === id ? { ...row, isExpanded: newState } : row);
+        });
     };
 
     const handleDragStart = (e: React.DragEvent, index: number) => {
-        if (!isHandleDragging) { e.preventDefault(); return; }
+        if (!isHandleDragging) {
+            console.log("[Column Drag] Drag attempted without handle grip active. Preventing drag.");
+            e.preventDefault();
+            return;
+        }
+        console.log(`[Column Drag] Drag started on column index: ${index} (${visibleColumns[index]?.key})`);
         setDraggedIdx(index);
         const img = new Image();
         img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -593,18 +633,29 @@ export const OnshapePage: FC = () => {
 
     const handleDragOver = (e: React.DragEvent, index: number) => {
         e.preventDefault();
-        if (draggedIdx !== null && dropTargetIdx !== index) setDropTargetIdx(index);
+        if (draggedIdx === null) return;
+        if (dropTargetIdx !== index) {
+            console.log(`[Column Drag Over] Dragging over column index: ${index}`);
+            setDropTargetIdx(index);
+        }
     };
 
     const handleDrop = (targetIdx: number) => {
-        if (draggedIdx === null || draggedIdx === targetIdx) { resetDragState(); return; }
+        console.log(`[Column Drop] Dropped column draggedIdx: ${draggedIdx} onto targetIdx: ${targetIdx}`);
+        if (draggedIdx === null || draggedIdx === targetIdx) {
+            console.log("[Column Drop] Invalid or identical drop position. Resetting drag state.");
+            resetDragState();
+            return;
+        }
         const originalFromIdx = columns.findIndex(c => c.key === visibleColumns[draggedIdx].key);
         const originalToIdx = columns.findIndex(c => c.key === visibleColumns[targetIdx].key);
+        console.log(`[Column Drop] Mapping visible indices to original columns array indices [from: ${originalFromIdx} -> to: ${originalToIdx}]`);
         moveColumn(originalFromIdx, originalToIdx);
         resetDragState();
     };
 
     const resetDragState = () => {
+        console.log("[Column Drag] Resetting column drag and drop states.");
         setDraggedIdx(null);
         setDropTargetIdx(null);
         setIsHandleDragging(false);
@@ -613,16 +664,26 @@ export const OnshapePage: FC = () => {
     const getDropIndicatorClass = (index: number) => (draggedIdx !== null && dropTargetIdx !== null && index === dropTargetIdx && draggedIdx !== dropTargetIdx) ? 'drop-indicator-both' : '';
 
     const handleCellChange = (rowId: number, col: ColumnConfig, rawValue: string) => {
+        console.log(`[Cell Change] Row ID [${rowId}], Column [${col.key}] raw value updated to:`, rawValue);
         setData(prev => prev.map(row => {
             if (row.id !== rowId) return row;
-            const updatedRow = { ...row, [col.key]: rawValue };
+            const updatedRow = { ...row };
+
+            if (col.type === 'number') {
+                (updatedRow as any)[col.key] = rawValue;
+            } else {
+                (updatedRow as any)[col.key] = rawValue;
+            }
 
             if (col.key === 'manufacturingMethod') {
+                console.log(`[Cell Change Logic] manufacturingMethod changed to [${rawValue}] for row [${rowId}]`);
                 if (rawValue === 'Purchased externally') {
                     updatedRow.group = 'Purchased part';
-                } else if (row.manufacturingMethod === 'Purchased externally') {
+                    console.log(`[Cell Change Logic] Auto-updating group to 'Purchased part'`);
+                } else if (row.manufacturingMethod === 'Purchased externally' && rawValue !== 'Purchased externally') {
                     updatedRow.group = 'Unique part';
                     updatedRow.producer = '';
+                    console.log(`[Cell Change Logic] Resetting group to 'Unique part' and clearing producer.`);
                 }
             }
             return updatedRow;
@@ -631,23 +692,41 @@ export const OnshapePage: FC = () => {
 
     const handleNumberBlur = (rowId: number, col: ColumnConfig, rawValue: string | number) => {
         const strVal = String(rawValue).trim();
-        if (strVal === '' || strVal === '.') { handleCellChange(rowId, col, '0'); return; }
+        console.log(`[Number Blur] Row ID [${rowId}], Column [${col.key}] raw blur value: "${strVal}"`);
+        if (strVal === '' || strVal === '.') {
+            console.log(`[Number Blur] Value is empty or single dot. Defaulting to '0'`);
+            handleCellChange(rowId, col, '0');
+            return;
+        }
 
         let processed = strVal;
         if (col.key === 'quantity' || col.key === 'revision') {
             const intVal = parseInt(processed, 10);
-            handleCellChange(rowId, col, String(isNaN(intVal) ? 0 : Math.max(0, intVal)));
+            const finalVal = isNaN(intVal) ? 0 : Math.max(0, intVal);
+            console.log(`[Number Blur Integer] Parsed integer value: ${finalVal}`);
+            handleCellChange(rowId, col, String(finalVal));
             return;
         }
 
-        if (processed.startsWith('.')) processed = '0' + processed;
-        if (processed.endsWith('.')) processed = processed.slice(0, -1);
+        if (processed.startsWith('.')) {
+            processed = '0' + processed;
+        }
+        if (processed.endsWith('.')) {
+            processed = processed.slice(0, -1);
+        }
+
         const num = Number(processed);
-        handleCellChange(rowId, col, String(isNaN(num) ? 0 : num));
+        const finalVal = isNaN(num) ? 0 : num;
+        console.log(`[Number Blur Decimal] Parsed decimal float value: ${finalVal}`);
+        handleCellChange(rowId, col, String(finalVal));
     };
 
     const moveColumn = (fromIdx: number, toIdx: number) => {
-        if (toIdx < 0 || toIdx >= columns.length) return;
+        if (toIdx < 0 || toIdx >= columns.length) {
+            console.warn(`[Move Column] Invalid destination index ${toIdx}. Aborting move.`);
+            return;
+        }
+        console.log(`[Move Column] Moving column from index ${fromIdx} to ${toIdx}`);
         const updatedColumns = [...columns];
         const [movedItem] = updatedColumns.splice(fromIdx, 1);
         updatedColumns.splice(toIdx, 0, movedItem);
@@ -656,10 +735,15 @@ export const OnshapePage: FC = () => {
 
     const handleContextMenu = (e: React.MouseEvent, key: string) => {
         e.preventDefault();
-        setContextMenu({ visible: true, x: e.clientX, y: e.clientY, columnIndex: columns.findIndex(c => c.key === key) });
+        const originalIndex = columns.findIndex(c => c.key === key);
+        console.log(`[Header Context Menu] Right-clicked header [${key}] at coordinates [x: ${e.clientX}, y: ${e.clientY}]`);
+        setContextMenu({ visible: true, x: e.clientX, y: e.clientY, columnIndex: originalIndex });
     };
 
     const closeContextMenu = () => {
+        if (contextMenu.visible || rowContextMenu.visible) {
+            console.log("[Context Menu] Closing all active context menus.");
+        }
         setContextMenu(prev => ({ ...prev, visible: false }));
         setRowContextMenu(prev => ({ ...prev, visible: false }));
     };
@@ -667,11 +751,13 @@ export const OnshapePage: FC = () => {
     const handleRowContextMenu = (e: React.MouseEvent, rowId: number) => {
         e.preventDefault();
         e.stopPropagation();
+        console.log(`[Row Context Menu] Right-clicked row ID [${rowId}] at coordinates [x: ${e.clientX}, y: ${e.clientY}]`);
         setRowContextMenu({ visible: true, x: e.clientX, y: e.clientY, rowId });
     };
 
     const handleDeleteRowClick = () => {
         if (rowContextMenu.rowId !== null) {
+            console.log(`[Delete Row] Deleting row ID [${rowContextMenu.rowId}] and all its recursive children.`);
             const idsToDelete = new Set<number>();
             const queue = [rowContextMenu.rowId];
             while (queue.length > 0) {
@@ -679,6 +765,7 @@ export const OnshapePage: FC = () => {
                 idsToDelete.add(currentId);
                 data.forEach(row => { if (row.parentId === currentId) queue.push(row.id); });
             }
+            console.log(`[Delete Row] Total rows marked for deletion (including sub-tree): ${idsToDelete.size}`, Array.from(idsToDelete));
             setData(prev => prev.filter(row => !idsToDelete.has(row.id)));
         }
         closeContextMenu();
@@ -700,117 +787,38 @@ export const OnshapePage: FC = () => {
         }
     };
 
-    const shortId = (v?: string) => (v ? `${v.slice(0, 8)}…` : '—');
-
     return (
-        <div className="table-page-container" onClick={closeContextMenu} style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden', background: '#f8fafc' }}>
-
-            {/* Header */}
-            <div style={{
-                padding: '14px 20px',
-                background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-                borderBottom: '1px solid #e2e8f0',
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-                flexShrink: 0
-            }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', minWidth: 0 }}>
-                        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.01em' }}>
-                            Bill of Materials
-                        </h2>
-                        <span style={{
-                            fontSize: '12px', fontWeight: 600, color: '#2563eb', background: '#eff6ff',
-                            border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '999px'
-                        }}>
-                            {data.length} {data.length === 1 ? 'item' : 'items'}
-                        </span>
-                        {!error && !loading && (
-                            <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 500 }}>● Live</span>
-                        )}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <button
-                            onClick={() => handleAddRow('part')}
-                            style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', transition: 'background 0.15s' }}
-                        >
-                            + Part
-                        </button>
-                        <button
-                            onClick={() => handleAddRow('subassembly')}
-                            style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                        >
-                            + Subassembly
-                        </button>
-                        <button
-                            onClick={() => { hasFetchedRef.current = false; fetchParts(); }}
-                            title="Refresh"
-                            style={{ padding: '6px 10px', fontSize: '13px', cursor: 'pointer', background: '#fff', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                        >
-                            ↻
-                        </button>
-                        <button
-                            onClick={() => setShowSettings(!showSettings)}
-                            title="Settings"
-                            style={{ padding: '6px 10px', fontSize: '13px', cursor: 'pointer', background: showSettings ? '#e2e8f0' : '#fff', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                        >
-                            ⚙
-                        </button>
-                    </div>
+        <div className="table-page-container" onClick={closeContextMenu}>
+            <div className="table-header-section">
+                <h2>BOM Table</h2>
+                <div className="metadata-tag">
+                    <div>wv: {workspaceOrVersion || 'None'}</div>
+                    <div>wvid: {workspaceOrVersionId || 'None'}</div>
+                    <div>mid: {microversionId || 'None'}</div>
                 </div>
-
-                {/* Metadata strip */}
-                <div style={{
-                    marginTop: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap', fontSize: '11px',
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#64748b'
-                }}>
-                    <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>doc: {shortId(docId ?? undefined)}</span>
-                    <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>{workspaceOrVersion}: {shortId(workspaceOrVersionId ?? undefined)}</span>
-                    <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>elem: {shortId(elementId ?? undefined)}</span>
-                    {microversionId && (
-                        <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>mid: {shortId(microversionId)}</span>
-                    )}
-                </div>
-
-                {/* Settings panel */}
-                {showSettings && (
-                    <div style={{
-                        marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1',
-                        display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'
-                    }}>
-                        <input
-                            type="password"
-                            placeholder="API Key (ACCESS_KEY:SECRET_KEY)"
-                            value={apiToken}
-                            onChange={(e) => handleSaveToken(e.target.value)}
-                            style={{ padding: '6px 10px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px', flex: '1 1 240px', maxWidth: '100%' }}
-                        />
-                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>Used as a fallback when the backend proxy is unreachable.</span>
-                    </div>
-                )}
             </div>
 
-            {/* Error */}
+            <div className="table-controls">
+                <button onClick={() => handleAddRow('part')}>+ Add Part</button>
+                <button onClick={() => handleAddRow('subassembly')} className="btn-secondary">+ Add Subassembly</button>
+                <button onClick={() => fetchParts()} className="btn-secondary">↻ Refresh</button>
+            </div>
+
+            {loading && <div style={{ padding: 12 }}>Loading BOM…</div>}
             {error && (
-                <div style={{ padding: '10px 20px', color: '#991b1b', background: '#fef2f2', borderBottom: '1px solid #fecaca', fontSize: '13px', flexShrink: 0 }}>
-                    <strong>Error:</strong> {error}
+                <div style={{ padding: 12, color: '#b91c1c' }}>
+                    Failed to load parts: {error}
                 </div>
             )}
 
-            {/* Loading */}
-            {loading && (
-                <div style={{ padding: '12px 20px', fontSize: '13px', color: '#475569', flexShrink: 0 }}>
-                    Fetching live assembly components…
-                </div>
-            )}
-
-            {/* Grid */}
-            <div className="table-wrapper" ref={wrapperRef} style={{ flex: 1, overflow: 'auto', width: '100%' }}>
-                <table className="custom-table" style={{ minWidth: '100%' }}>
+            <div className="table-wrapper" ref={wrapperRef}>
+                <table className="custom-table">
                     <colgroup>
                         {visibleColumns.map((col, idx) => {
                             const isLast = idx === visibleColumns.length - 1;
-                            const width = columnWidths[col.key] ?? (isLast && autoLastColWidth !== null ? autoLastColWidth : DEFAULT_COL_WIDTH);
+                            const width =
+                                columnWidths[col.key] ??
+                                (isLast && autoLastColWidth !== null ? autoLastColWidth : DEFAULT_COL_WIDTH);
                             return <col key={col.key} style={{ width }} />;
                         })}
                     </colgroup>
@@ -868,12 +876,11 @@ export const OnshapePage: FC = () => {
 
                                         return (
                                             <td key={col.key} className={`table-td ${getDropIndicatorClass(colIndex)} ${isCellDisabled ? 'cell-disabled' : ''}`}>
-                                                <div className="td-content-wrapper" style={colIndex === 0 ? { paddingLeft: `${row.level * 16}px` } : {}}>
+                                                <div className="td-content-wrapper" style={colIndex === 0 ? { paddingLeft: `${row.level * 24}px` } : {}}>
                                                     {colIndex === 0 && isSubassembly && (
-                                                        <button className="expand-toggle" onClick={(e) => toggleExpand(row.id, e)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', marginRight: '4px' }}>
-                                                            {row.isExpanded ? '▼' : '▶'}
-                                                        </button>
+                                                        <button className="expand-toggle" onClick={(e) => toggleExpand(row.id, e)}>{row.isExpanded ? '▼' : '▶'}</button>
                                                     )}
+                                                    {colIndex === 0 && !isSubassembly && <span className="expand-placeholder"></span>}
 
                                                     {col.type === 'select' ? (
                                                         <select
@@ -892,6 +899,9 @@ export const OnshapePage: FC = () => {
                                                             ) : (
                                                                 col.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)
                                                             )}
+                                                            {col.key === 'group' && (isSubassembly || isPurchased) && (
+                                                                <option value={displayValue}>{displayValue}</option>
+                                                            )}
                                                         </select>
                                                     ) : col.type === 'number' ? (
                                                         <input
@@ -903,7 +913,13 @@ export const OnshapePage: FC = () => {
                                                             onChange={(e) => handleCellChange(row.id, col, e.target.value)}
                                                             onBlur={(e) => handleNumberBlur(row.id, col, e.target.value)}
                                                             onFocus={(e) => e.target.select()}
-                                                            onKeyDown={(e) => handleCellKeyDown(e, rowIndex, colIndex)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.currentTarget.blur();
+                                                                } else {
+                                                                    handleCellKeyDown(e, rowIndex, colIndex);
+                                                                }
+                                                            }}
                                                             onClick={(e) => e.stopPropagation()}
                                                             className="cell-input"
                                                             disabled={isCellDisabled}
@@ -931,8 +947,8 @@ export const OnshapePage: FC = () => {
                         })}
                         {!loading && visibleData.length === 0 && (
                             <tr>
-                                <td colSpan={visibleColumns.length} style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
-                                    No components found in this assembly.
+                                <td colSpan={visibleColumns.length} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
+                                    No items in BOM. Add a part or subassembly to begin.
                                 </td>
                             </tr>
                         )}
@@ -940,15 +956,14 @@ export const OnshapePage: FC = () => {
                 </table>
             </div>
 
-            {/* Context menus */}
             {contextMenu.visible && (
-                <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x, position: 'fixed', zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
+                <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => { if (contextMenu.columnIndex > 0) moveColumn(contextMenu.columnIndex, contextMenu.columnIndex - 1); closeContextMenu(); }} disabled={contextMenu.columnIndex === 0}>Move Left</button>
                     <button onClick={() => { if (contextMenu.columnIndex < columns.length - 1) moveColumn(contextMenu.columnIndex, contextMenu.columnIndex + 1); closeContextMenu(); }} disabled={contextMenu.columnIndex === columns.length - 1}>Move Right</button>
                 </div>
             )}
             {rowContextMenu.visible && activeContextMenuRow && (
-                <div className="context-menu" style={{ top: rowContextMenu.y, left: rowContextMenu.x, position: 'fixed', zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
+                <div className="context-menu" style={{ top: rowContextMenu.y, left: rowContextMenu.x }} onClick={(e) => e.stopPropagation()}>
                     {activeContextMenuRow.type === 'subassembly' && (
                         <>
                             <button onClick={() => handleAddRow('part', activeContextMenuRow.id)}>Add Part Inside</button>
@@ -962,5 +977,3 @@ export const OnshapePage: FC = () => {
         </div>
     );
 };
-
-export default OnshapePage;
