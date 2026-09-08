@@ -1,6 +1,13 @@
 import type { FC } from "react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { 
+    useOnshapeContext, 
+    useOnshapeClient, 
+    useOnshapeKeepAlive, 
+    useOnshapeMessage, 
+    isSaveChangesMessage 
+} from '../util/OnshapeExtension';
 import '../css/Table.css';
 
 interface RowData {
@@ -103,6 +110,37 @@ const DEFAULT_COL_WIDTH = 120;
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5050';
 
+const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
+    console.log("[Onshape REST] Parsing raw Onshape BOM payload:", json);
+    const bomTable = json.bomTable || json;
+    const items = bomTable.items || json.items || [];
+    
+    const parseItems = (itemList: any[]): RawBomNode[] => {
+        return itemList.map((item, idx) => {
+            const values = item.headerIdToValue || item.propertyValues || {};
+            const name = values.name || values.Name || item.name || `Part ${idx + 1}`;
+            const hasChildren = Boolean(item.children && item.children.length > 0);
+
+            return {
+                id: item.id || `onshape_item_${idx}_${Math.random()}`,
+                type: hasChildren ? 'subassembly' : 'part',
+                partName: String(name),
+                partId: String(values.partNumber || values.PartNumber || values.itemCode || ''),
+                revision: Number(values.revision || values.Revision || 1),
+                quantity: values.quantity || values.Quantity || 1,
+                material: typeof values.material === 'object' ? (values.material?.displayName || '') : String(values.material || ''),
+                mass: values.mass || values.Mass || 0,
+                manufacturingStatus: String(values.state || values.status || 'In Design'),
+                manufacturingMethod: String(values.vendor || values.mfgMethod || ''),
+                comments: String(values.description || values.note || ''),
+                children: item.children ? parseItems(item.children) : []
+            };
+        });
+    };
+
+    return parseItems(items);
+};
+
 const flattenBomTree = (
     nodes: RawBomNode[],
     parentId: number | null,
@@ -146,14 +184,25 @@ export const OnshapePage: FC = () => {
     console.log("[Render] OnshapePage component rendering/re-rendering");
     const [searchParams] = useSearchParams();
 
-    const workspaceOrVersion = searchParams.get('wv');
-    const workspaceOrVersionId = searchParams.get('wvid');
-    const microversionId = searchParams.get('mid');
+    const context = useOnshapeContext();
+    const client = useOnshapeClient({ context });
 
-    const docId = searchParams.get('documentId') || searchParams.get('did') || searchParams.get('d');
-    const wvmType = searchParams.get('wv') || searchParams.get('wvmT') || workspaceOrVersion;
-    const wvmId = searchParams.get('wvid') || searchParams.get('wvId') || workspaceOrVersionId;
-    const elementId = searchParams.get('elementId') || searchParams.get('eid') || searchParams.get('e');
+    useOnshapeKeepAlive(client);
+
+    useOnshapeMessage(client, (message) => {
+        if (isSaveChangesMessage(message)) {
+            console.log("[Onshape] Save changes requested by host.");
+            client.finishedSaving(message.messageId);
+        }
+    });
+
+    const docId = context.documentId || searchParams.get('documentId') || searchParams.get('did') || searchParams.get('d');
+    const wvmType = context.workspaceId ? 'w' : context.versionId ? 'v' : (searchParams.get('wv') || searchParams.get('wvmT') || 'w');
+    const wvmId = context.workspaceId || context.versionId || searchParams.get('wvid') || searchParams.get('wvId');
+    const workspaceOrVersion = wvmType;
+    const workspaceOrVersionId = wvmId;
+    const microversionId = context.microversionId || searchParams.get('mid') || '';
+    const elementId = context.elementId || searchParams.get('elementId') || searchParams.get('eid') || searchParams.get('e');
 
     const [data, setData] = useState<RowData[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -191,26 +240,59 @@ export const OnshapePage: FC = () => {
     const hasFetchedRef = useRef(false);
 
     const fetchParts = useCallback(async (signal?: AbortSignal) => {
-        console.log("[API] fetchParts initiated");
+        console.log("[API] fetchParts initiated", { docId, wvmType, wvmId, elementId });
         setLoading(true);
         setError(null);
-        try {
-            let targetUrl = `${API_BASE}/api/db/bom/all`;
 
-            if (docId && wvmType && wvmId && elementId) {
-                targetUrl = `${API_BASE}/api/onshape/bom/d/${docId}/wvmT/${wvmType}/wvmI/${wvmId}/e/${elementId}`;
+        try {
+            let res: Response | null = null;
+
+            // Attempt 1: Fetch through backend proxy server on port 5050
+            try {
+                let targetUrl = `${API_BASE}/api/db/bom/all`;
+                if (docId && wvmType && wvmId && elementId) {
+                    targetUrl = `${API_BASE}/api/onshape/bom/d/${docId}/wvmT/${wvmType}/wvmI/${wvmId}/e/${elementId}`;
+                }
+                console.log(`[API Proxy] Querying backend route: ${targetUrl}`);
+                res = await fetch(targetUrl, { signal });
+            } catch (proxyErr) {
+                console.warn("[API Proxy] Backend server unreachable. Retrying via direct Onshape REST API.");
             }
 
-            console.log(`[API] Sending fetch request to: ${targetUrl}`);
-            const res = await fetch(targetUrl, { signal });
-            console.log(`[API] Response status: ${res.status} ${res.statusText}`);
-            
-            if (!res.ok) throw new Error(`Server responded ${res.status}`);
-            const json = await res.json();
+            // Attempt 2: Direct Onshape REST API Call via CORS proxy wrapper
+            if ((!res || !res.ok) && docId && wvmType && wvmId && elementId) {
+                const targetOnshapeApi = `https://cad.onshape.com/api/v2/assemblies/d/${docId}/${wvmType}/${wvmId}/e/${elementId}/bom?indented=true`;
+                const directOnshapeUrl = `https://corsproxy.io/?${encodeURIComponent(targetOnshapeApi)}`;
 
-            const rawNodes: RawBomNode[] = Array.isArray(json)
-                ? json
-                : (json.data ?? json.parts ?? json.bom ?? []);
+                console.log(`[Onshape Direct REST] Fetching assembly components via CORS proxy: ${directOnshapeUrl}`);
+
+                const headers: Record<string, string> = {
+                    'Accept': 'application/vnd.onshape.v2+json'
+                };
+
+                const storedToken = localStorage.getItem('ONSHAPE_API_TOKEN');
+                if (storedToken) {
+                    let authToken = storedToken.trim();
+                    if (authToken.includes(':') && !authToken.startsWith('Basic ')) {
+                        authToken = `Basic ${btoa(authToken)}`;
+                    } else if (!authToken.startsWith('Basic ') && !authToken.startsWith('Bearer ')) {
+                        authToken = `Bearer ${authToken}`;
+                    }
+                    headers['Authorization'] = authToken;
+                }
+
+                res = await fetch(directOnshapeUrl, {
+                    signal,
+                    headers
+                });
+            }
+
+            if (!res || !res.ok) {
+                throw new Error(`Server or Onshape API returned status ${res?.status || 'Error'}. Verify active document permissions or API token.`);
+            }
+
+            const json = await res.json();
+            const rawNodes = parseOnshapeBomResponse(json);
 
             const counterRef = { current: 1 };
             const flattened = flattenBomTree(rawNodes, null, counterRef);
