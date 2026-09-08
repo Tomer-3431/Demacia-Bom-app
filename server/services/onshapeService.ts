@@ -519,6 +519,61 @@ async function getPartThumbnail(
   );
 }
 
+/**
+ * Sets a custom thumbnail for an element.
+ * Automatically extracts image dimensions from the provided image buffer.
+ * Endpoint: POST v10/thumbnails/d/{did}/w/{wid}/e/{eid}
+ */
+async function setElementThumbnail(
+  ref: OnshapeBomRef,
+  imageBuffer: Buffer,
+  mimeType: string = 'image/png'
+): Promise<void> {
+  const { documentID, wvmID, wvmType, elementID } = ref;
+  const { width, height } = getImageDimensions(imageBuffer);
+  const base64Image = imageBuffer.toString('base64');
+
+  await onshapeRequest(`/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}`, {
+    method: 'POST',
+    body: {
+      base64EncodedImage: base64Image,
+      mimeType,
+      size: `${width}x${height}`,
+      imageWidth: width,
+      imageHeight: height,
+    },
+  });
+}
+
+/**
+ * Sets a custom thumbnail for a part.
+ * Automatically extracts image dimensions from the provided image buffer.
+ * Endpoint: POST v10/thumbnails/d/{did}/w/{wid}/e/{eid}/p/{pid}
+ */
+async function setPartThumbnail(
+  ref: OnshapePartRef,
+  imageBuffer: Buffer,
+  mimeType: string = 'image/png'
+): Promise<void> {
+  const { documentID, wvmID, wvmType, elementID, partID } = ref;
+  const { width, height } = getImageDimensions(imageBuffer);
+  const base64Image = imageBuffer.toString('base64');
+
+  await onshapeRequest(
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}`,
+    {
+      method: 'POST',
+      body: {
+        base64EncodedImage: base64Image,
+        mimeType,
+        size: `${width}x${height}`,
+        imageWidth: width,
+        imageHeight: height,
+      },
+    }
+  );
+}
+
 export default {
   checkConnection,
   getPart,
