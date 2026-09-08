@@ -35,10 +35,7 @@
  * API Explorer (https://cad.onshape.com/glassworks/explorer/) if a call
  * starts returning 404s, since Onshape does bump these over time.
  */
-
-import dotenv from 'dotenv';
-
-dotenv.config();
+import 'dotenv/config';
 
 const ONSHAPE_BASE_URL = process.env.ONSHAPE_BASE_URL || 'https://cad.onshape.com/api';
 
