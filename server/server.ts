@@ -29,5 +29,5 @@ async function startServer(): Promise<void> {
     process.exit(1)
   }
 }
-app.use('/api', require('./routes').default);
+
 startServer();
