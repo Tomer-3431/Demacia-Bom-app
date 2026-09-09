@@ -25,6 +25,8 @@ const workOrderSchema = new mongoose.Schema(
 
     parts: { type: [subPartSchema], default: [] },
 
+    avatarID: { type: String },
+
     comments: { type: String },
     workOrderCreated: { type: Date },
   },
