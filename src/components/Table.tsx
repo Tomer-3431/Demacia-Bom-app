@@ -23,7 +23,9 @@ interface RowContextMenuState {
 export interface ColumnConfig {
     key: any;
     label: string;
-    type: 'string' | 'number' | 'select' | 'boolean';
+    type: 'string' | 'number' | 'select' | 'boolean' | 'button';
+    buttonText?: string;
+    onButtonClick?: (row: RowData & any) => void;
     options?: string[];
     isDisabled?: (row: RowData & any) => boolean;
 }
@@ -31,13 +33,14 @@ export interface ColumnConfig {
 interface TableParam {
     data: (RowData & any)[],
     columnsData: ColumnConfig[],
-    newRowFunction: (id: string, parentId: string | null) => RowData,
+    newRowFunction: ((id: string, parentId: string | null) => RowData) | undefined,
     setData: (newData: RowData[]) => void,
     minLastColWidth?: number;
     defaultColWidth?: number;
+    removeTopRow?: boolean;
 }
 
-export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction, setData, minLastColWidth = 120, defaultColWidth = 120 }) => {
+export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction, setData, minLastColWidth = 120, defaultColWidth = 120, removeTopRow = false }) => {
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
     const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
@@ -260,6 +263,7 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
 
     const handleAddRow = (parentId: string | null = null) => {
         const newId = Date.now().toString();
+        if (!newRowFunction) return;
         const newRow = newRowFunction(newId, parentId);
 
         let newData = [...data, newRow];
@@ -411,9 +415,11 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
 
     return (
         <div className="" onClick={closeContextMenu}>
-            <div className="table-controls">
-                <button onClick={() => handleAddRow()}>+ Add Item</button>
-            </div>
+            {newRowFunction &&
+                <div className="table-controls">
+                    <button onClick={() => handleAddRow()}>+ Add Item</button>
+                </div>
+            }
 
             <div className="table-wrapper" ref={wrapperRef}>
                 <table className="custom-table">
@@ -453,7 +459,7 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
                         </tr>
                     </thead>
                     <tbody>
-                        {visibleData.map((row, rowIndex) => {
+                        {visibleData.filter((row, i) => !removeTopRow || (i !== 0)).map((row, rowIndex) => {
                             const isRowParent = isParent(row.id);
 
                             return (
@@ -486,6 +492,18 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
                                                                 <option value={option}>{option}</option>
                                                             ))}
                                                         </select>
+                                                    ) : col.type === 'button' ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                col.onButtonClick?.(row);
+                                                            }}
+                                                            disabled={!row[col.key]}
+                                                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        >
+                                                            {col.buttonText || "Action"}
+                                                        </button>
                                                     ) : col.type === 'boolean' ? (
                                                         <input
                                                             type="checkbox"
@@ -556,8 +574,12 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
             {rowContextMenu.visible && activeContextMenuRow && (
                 <div className="context-menu" style={{ top: rowContextMenu.y, left: rowContextMenu.x }} onClick={(e) => e.stopPropagation()}>
 
-                    <button onClick={() => handleAddRow(activeContextMenuRow.id)}>add item inside</button>
-                    <div className="context-divider"></div>
+                    {
+                    newRowFunction && (<div>
+                        <button onClick={() => handleAddRow(activeContextMenuRow.id)}>add item inside</button>
+                        <div className="context-divider" />
+                    </div>)
+                    }
                     <button onClick={handleDeleteRowClick} className="delete-btn">Delete Row</button>
                 </div>
             )}
