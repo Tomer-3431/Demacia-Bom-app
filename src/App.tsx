@@ -3,6 +3,7 @@ import './css/App.css';
 import Home from './pages/HomePage';
 import MainLayout from './components/MainLayout';
 import { OnshapePage } from './pages/OnshapePage';
+import CreateBomPage from './pages/CreateBomPage';
 import BomDetailsPage from './pages/BomdetailsPage';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Home />} />
           <Route path="/onshape" element={<OnshapePage />} />
+          <Route path="/new-bom" element={<CreateBomPage />} />
           <Route path="/bom/:bomId" element={<BomDetailsPage />} />
         </Route>
       </Routes>
