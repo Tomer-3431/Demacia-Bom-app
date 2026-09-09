@@ -459,7 +459,7 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
                         </tr>
                     </thead>
                     <tbody>
-                        {visibleData.filter((row, i) => !removeTopRow || (i !== 0)).map((row, rowIndex) => {
+                        {visibleData.filter((_row, i) => !removeTopRow || (i !== 0)).map((row, rowIndex) => {
                             const isRowParent = isParent(row.id);
 
                             return (
