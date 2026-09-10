@@ -1,30 +1,112 @@
 import type { FC } from "react";
-import { useState, useEffect, useRef } from "react";
-import { type RowData, type RenderRow, INITIAL_DATA } from "./TableDefs/bomRows";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+    useOnshapeContext,
+    useOnshapeClient,
+    useOnshapeKeepAlive,
+    useOnshapeMessage,
+    isSaveChangesMessage
+} from '../util/OnshapeExtension';
+import { type RowData, type RenderRow, type RawBomNode, PART_STATUS_OPTIONS, ASSEMBLY_STATUS_OPTIONS } from "./TableDefs/bomRows";
 import { type ColumnConfig, INITIAL_COLUMNS } from "./TableDefs/bomColumns";
 import '../css/Table.css';
 
-interface ContextMenuState {
-    visible: boolean;
-    x: number;
-    y: number;
-    columnIndex: number;
-}
-
-interface RowContextMenuState {
-    visible: boolean;
-    x: number;
-    y: number;
-    rowId: string | null;
-}
+interface ContextMenuState { visible: boolean; x: number; y: number; columnIndex: number; }
+interface RowContextMenuState { visible: boolean; x: number; y: number; rowId: number | null; }
 
 const MIN_LAST_COL_WIDTH = 120;
 const DEFAULT_COL_WIDTH = 120;
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5050';
 
-export const OnshapeBomPage: FC = () => {
-    const [data, setData] = useState<RowData[]>(INITIAL_DATA);
+const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
+    const bomTable = json.bomTable || json;
+    const items = bomTable.items || json.items || (Array.isArray(json) ? json : []);
+
+    const parseItems = (itemList: any[]): RawBomNode[] => {
+        return itemList.map((item, idx) => {
+            const values = item.headerIdToValue || item.propertyValues || {};
+            const name = values.name || values.Name || item.name || item.partName || `Part ${idx + 1}`;
+            
+            let materialVal = '';
+            const rawMaterial = values.material || values.Material || values.MATERIAL || item.material;
+            if (rawMaterial) {
+                materialVal = typeof rawMaterial === 'object' && rawMaterial !== null 
+                    ? (rawMaterial.displayName || rawMaterial.name || rawMaterial.title || '') 
+                    : String(rawMaterial);
+            }
+
+            const hasChildren = Boolean(item.children && item.children.length > 0);
+
+            return {
+                id: item.id || `onshape_item_${idx}_${Math.random()}`,
+                type: item.type || (hasChildren ? 'subassembly' : 'part'),
+                partName: String(name),
+                partId: String(values.partNumber || values.PartNumber || values.itemCode || item.partId || ''),
+                revision: Number(values.revision || values.Revision || item.revision || 1),
+                quantity: values.quantity || values.Quantity || item.quantity || 1,
+                material: materialVal,
+                mass: values.mass || values.Mass || item.mass || 0,
+                manufacturingStatus: String(values.state || values.status || item.manufacturingStatus || 'In Design'),
+                manufacturingMethod: String(values.vendor || values.mfgMethod || item.manufacturingMethod || ''),
+                comments: String(values.description || values.note || item.comments || ''),
+                children: item.children ? parseItems(item.children) : []
+            };
+        });
+    };
+    return parseItems(items);
+};
+
+const flattenBomTree = (nodes: RawBomNode[], parentId: number | null, counterRef: { current: number }): RowData[] => {
+    const result: RowData[] = [];
+    for (const node of nodes) {
+        const id = counterRef.current++;
+        result.push({
+            id, type: node.type, parentId, isExpanded: true,
+            projectName: node.projectName ?? '',
+            manufacturingStatus: node.manufacturingStatus ?? 'Not Started',
+            partId: node.partId ?? '',
+            revision: node.revision ?? 1,
+            partName: node.partName ?? node.name ?? '',
+            whereUsed: node.whereUsed ?? '',
+            quantity: node.quantity ?? (node.type === 'part' ? 0 : 1),
+            documentUrl: node.documentUrl ?? '',
+            material: node.material ?? '',
+            mass: node.mass ?? 0,
+            price: node.price ?? 0,
+            manufacturingMethod: node.manufacturingMethod ?? '',
+            producer: node.producer ?? '',
+            comments: node.comments ?? '',
+            group: node.group ?? (node.type === 'subassembly' ? 'Subassembly' : 'Unique part'),
+        });
+        if (node.children?.length) {
+            result.push(...flattenBomTree(node.children, id, counterRef));
+        }
+    }
+    return result;
+};
+
+export const OnshapePage: FC = () => {
+    const [searchParams] = useSearchParams();
+    const context = useOnshapeContext();
+    const client = useOnshapeClient({ context });
+    useOnshapeKeepAlive(client);
+
+    useOnshapeMessage(client, (message) => {
+        if (isSaveChangesMessage(message)) client.finishedSaving(message.messageId);
+    });
+
+    const workspaceOrVersion = context.workspaceId ? 'w' : context.versionId ? 'v' : (searchParams.get('wv') || 'w');
+    const workspaceOrVersionId = context.workspaceId || context.versionId || searchParams.get('wvid');
+    const microversionId = context.microversionId || searchParams.get('mid') || '';
+    const docId = context.documentId || searchParams.get('documentId') || searchParams.get('did') || searchParams.get('d');
+    const elementId = context.elementId || searchParams.get('elementId') || searchParams.get('eid') || searchParams.get('e');
+
+    const [data, setData] = useState<RowData[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
     const [columns, setColumns] = useState<ColumnConfig[]>(INITIAL_COLUMNS);
-
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
     const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
@@ -35,54 +117,77 @@ export const OnshapeBomPage: FC = () => {
 
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [autoLastColWidth, setAutoLastColWidth] = useState<number | null>(null);
+    const hasFetchedRef = useRef(false);
 
-    const visibleColumns = columns;
+    const fetchParts = useCallback(async (signal?: AbortSignal) => {
+        setLoading(true);
+        setError(null);
+        try {
+            let res: Response | null = null;
+            try {
+                let targetUrl = `${API_BASE}/api/db/bom/all`;
+                if (docId && workspaceOrVersion && workspaceOrVersionId && elementId) {
+                    targetUrl = `${API_BASE}/api/onshape/bom/d/${docId}/wvmT/${workspaceOrVersion}/wvmI/${workspaceOrVersionId}/e/${elementId}`;
+                }
+                res = await fetch(targetUrl, { signal });
+            } catch {}
+
+            if ((!res || !res.ok) && docId && workspaceOrVersion && workspaceOrVersionId && elementId) {
+                const targetOnshapeApi = `https://cad.onshape.com/api/v2/assemblies/d/${docId}/${workspaceOrVersion}/${workspaceOrVersionId}/e/${elementId}/bom?indented=true`;
+                const headers: Record<string, string> = { 'Accept': 'application/vnd.onshape.v2+json' };
+                const storedToken = localStorage.getItem('ONSHAPE_API_TOKEN');
+                if (storedToken) {
+                    headers['Authorization'] = storedToken.startsWith('Basic ') || storedToken.startsWith('Bearer ') ? storedToken : `Bearer ${storedToken}`;
+                }
+                res = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetOnshapeApi)}`, { signal, headers });
+            }
+
+            if (!res || !res.ok) {
+                res = await fetch(`${API_BASE}/api/db/bom/all`, { signal });
+            }
+
+            if (!res || !res.ok) throw new Error(`Server or Onshape API returned status ${res?.status || 'Error'}.`);
+
+            const json = await res.json();
+            const rawNodes = parseOnshapeBomResponse(json);
+            setData(flattenBomTree(rawNodes, null, { current: 1 }));
+        } catch (err) {
+            if (err instanceof Error && err.name !== 'AbortError') setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [docId, workspaceOrVersion, workspaceOrVersionId, elementId]);
 
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                closeContextMenu();
-            }
-        };
-        const handleScroll = () => {
-            closeContextMenu();
-        };
+        if (hasFetchedRef.current) return;
+        hasFetchedRef.current = true;
+        const controller = new AbortController();
+        fetchParts(controller.signal);
+        return () => controller.abort();
+    }, [fetchParts]);
 
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('scroll', handleScroll, true);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('scroll', handleScroll, true);
-        };
+    useEffect(() => {
+        const close = () => { setContextMenu(p => ({ ...p, visible: false })); setRowContextMenu(p => ({ ...p, visible: false })); };
+        window.addEventListener('keydown', (e) => e.key === 'Escape' && close());
+        window.addEventListener('scroll', close, true);
+        return () => { window.removeEventListener('keydown', (e) => e.key === 'Escape' && close()); window.removeEventListener('scroll', close, true); };
     }, []);
+
+    const hasPurchasedParts = data.some(row => row.manufacturingMethod === 'Purchased externally');
+    const visibleColumns = columns.filter(col => col.key !== 'producer' || hasPurchasedParts);
 
     useEffect(() => {
         const wrapper = wrapperRef.current;
         if (!wrapper) return;
-
         const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (!lastCol) {
-            setAutoLastColWidth(null);
-            return;
-        }
+        if (!lastCol) { setAutoLastColWidth(null); return; }
 
         const recompute = () => {
-            if (Object.prototype.hasOwnProperty.call(columnWidths, lastCol.key)) {
-                setAutoLastColWidth(null);
-                return;
-            }
-
-            const othersWidth = visibleColumns
-                .slice(0, -1)
-                .reduce((sum, c) => sum + (columnWidths[c.key] || DEFAULT_COL_WIDTH), 0);
-
-            const available = wrapper.clientWidth - othersWidth;
-            const computedWidth = Math.max(MIN_LAST_COL_WIDTH, available);
-            setAutoLastColWidth(computedWidth);
+            if (Object.prototype.hasOwnProperty.call(columnWidths, lastCol.key)) { setAutoLastColWidth(null); return; }
+            const othersWidth = visibleColumns.slice(0, -1).reduce((sum, c) => sum + (columnWidths[c.key] || DEFAULT_COL_WIDTH), 0);
+            setAutoLastColWidth(Math.max(MIN_LAST_COL_WIDTH, wrapper.clientWidth - othersWidth));
         };
-
         recompute();
-
         const ro = new ResizeObserver(recompute);
         ro.observe(wrapper);
         return () => ro.disconnect();
@@ -90,19 +195,16 @@ export const OnshapeBomPage: FC = () => {
 
     const getVisibleData = (): RenderRow[] => {
         const result: RenderRow[] = [];
-        const addChildren = (parentId: string | null, level: number) => {
+        const addChildren = (parentId: number | null, level: number) => {
             const children = data.filter(row => row.parentId === parentId);
             for (const child of children) {
                 result.push({ ...child, level });
-                if (child.type === 'subassembly' && child.isExpanded) {
-                    addChildren(child.id, level + 1);
-                }
+                if (child.type === 'subassembly' && child.isExpanded) addChildren(child.id, level + 1);
             }
         };
         addChildren(null, 0);
         return result;
     };
-
     const visibleData = getVisibleData();
     const activeContextMenuRow = data.find(r => r.id === rowContextMenu.rowId);
 
@@ -161,301 +263,158 @@ export const OnshapeBomPage: FC = () => {
     };
 
     const handleResizeStart = (e: React.PointerEvent, key: string) => {
-        e.stopPropagation();
-        e.preventDefault();
-
+        e.stopPropagation(); e.preventDefault();
         const th = (e.target as HTMLElement).closest('th');
         if (!th) return;
-
         const table = th.closest('table');
-        const colIndex = Array.from(th.parentNode?.children || []).indexOf(th);
-        const colElement = table?.querySelector('colgroup')?.children[colIndex] as HTMLElement;
-
-        const initialWidth = colElement ? colElement.getBoundingClientRect().width : th.getBoundingClientRect().width;
+        const colIdx = Array.from(th.parentNode?.children || []).indexOf(th);
+        const colEl = table?.querySelector('colgroup')?.children[colIdx] as HTMLElement;
+        const initWidth = colEl ? colEl.getBoundingClientRect().width : th.getBoundingClientRect().width;
         const startX = e.clientX;
-        const wrapper = th.closest('.table-wrapper') as HTMLElement;
+        let currWidth = initWidth;
 
-        let currentWidth = initialWidth;
-        let latestClientX = startX;
-        let isActive = true;
-        let rafId: number | null = null;
+        const target = e.target as HTMLElement;
+        target.setPointerCapture(e.pointerId);
 
-        const EDGE_ZONE = 40;
-        const MAX_EDGE_SPEED = 40;
-
-        const targetElement = e.target as HTMLElement;
-        targetElement.setPointerCapture(e.pointerId);
-
-        const applyWidth = (w: number) => {
-            currentWidth = Math.max(60, w);
-            if (colElement) colElement.style.width = `${currentWidth}px`;
+        const onMove = (mv: PointerEvent) => {
+            currWidth = Math.max(60, initWidth + (mv.clientX - startX));
+            if (colEl) colEl.style.width = `${currWidth}px`;
             if (table) table.style.width = 'max-content';
         };
-
-        const tick = () => {
-            if (!isActive) return;
-
-            const rawDelta = latestClientX - startX;
-            const absDelta = Math.abs(rawDelta);
-            const isShrinking = rawDelta < 0;
-
-            const speedMultiplier = 1 + (absDelta * 0.015);
-            const scaledDelta = rawDelta * speedMultiplier;
-
-            applyWidth(initialWidth + scaledDelta);
-
-            const distanceIntoRightEdge = latestClientX - (window.innerWidth - EDGE_ZONE);
-            if (distanceIntoRightEdge > 0) {
-                const growth = Math.min(MAX_EDGE_SPEED, (distanceIntoRightEdge / EDGE_ZONE) * MAX_EDGE_SPEED);
-                applyWidth(currentWidth + growth);
-                if (wrapper) wrapper.scrollLeft += growth * 1.5;
-            } else if (latestClientX <= EDGE_ZONE) {
-                const distanceIntoLeftEdge = EDGE_ZONE - latestClientX;
-                const shrink = Math.min(MAX_EDGE_SPEED, (distanceIntoLeftEdge / EDGE_ZONE) * MAX_EDGE_SPEED);
-                applyWidth(currentWidth - shrink);
-            }
-
-            if (wrapper && !isShrinking) {
-                const wrapperRect = wrapper.getBoundingClientRect();
-                if (latestClientX > wrapperRect.right - 100) {
-                    const scrollPush = Math.max(5, (latestClientX - (wrapperRect.right - 100)) * 0.8);
-                    wrapper.scrollLeft += scrollPush;
-                }
-            }
-
-            rafId = requestAnimationFrame(tick);
+        const onUp = (up: PointerEvent) => {
+            target.releasePointerCapture(up.pointerId);
+            target.removeEventListener('pointermove', onMove);
+            target.removeEventListener('pointerup', onUp);
+            setColumnWidths(p => ({ ...p, [key]: currWidth }));
         };
-
-        const onPointerMove = (moveEvent: PointerEvent) => {
-            latestClientX = moveEvent.clientX;
-        };
-
-        const onPointerUp = (upEvent: PointerEvent) => {
-            isActive = false;
-            if (rafId !== null) cancelAnimationFrame(rafId);
-            targetElement.releasePointerCapture(upEvent.pointerId);
-            targetElement.removeEventListener('pointermove', onPointerMove);
-            targetElement.removeEventListener('pointerup', onPointerUp);
-
-            setColumnWidths(prev => ({ ...prev, [key]: currentWidth }));
-        };
-
-        targetElement.addEventListener('pointermove', onPointerMove);
-        targetElement.addEventListener('pointerup', onPointerUp);
-        rafId = requestAnimationFrame(tick);
+        target.addEventListener('pointermove', onMove);
+        target.addEventListener('pointerup', onUp);
     };
 
-    const handleResizeDoubleClick = (e: React.MouseEvent, key: string, label: string) => {
-        e.stopPropagation();
-        let maxChars = label.length;
-        visibleData.forEach(row => {
-            const val = row[key as keyof RowData];
-            const str = val !== null && val !== undefined ? String(val) : '';
-            const indentChars = (visibleColumns[0].key === key ? row.level * 3 : 0);
-            maxChars = Math.max(maxChars, str.length + indentChars);
-        });
-
-        const tightFitWidth = Math.ceil((maxChars * 7.5) + 32);
-        setColumnWidths(prev => ({ ...prev, [key]: Math.max(70, tightFitWidth) }));
-    };
-
-    const handleAddRow = (type: 'part' | 'subassembly', parentId: string | null = null) => {
-        const newId = String(data.length > 0 ? Math.max(...data.map(row => Number(row.id) || data.length)) + 1 : 1);
+    const handleAddRow = (type: 'part' | 'subassembly', parentId: number | null = null) => {
+        const newId = data.length > 0 ? Math.max(...data.map(r => r.id)) + 1 : 1;
         const newRow: RowData = {
-            id: newId,
-            type,
-            parentId,
-            isExpanded: true,
-            name: type === 'subassembly' ? 'New Subassembly' : 'New Part',
-            catalogNumber: '',
-            description: '',
-            engineer: '',
-            comments: '',
-            onshapeURL: '',
+            id: newId, type, parentId, isExpanded: true, projectName: '', manufacturingStatus: 'Not Started',
+            partId: '', revision: 1, partName: '', whereUsed: parentId ? 'Subassembly' : 'Main Assembly', quantity: type === 'part' ? 0 : 1,
+            documentUrl: '', material: '', mass: 0, price: 0, manufacturingMethod: '', producer: '', comments: '', group: type === 'subassembly' ? 'Subassembly' : 'Unique part'
         };
-
-        setData(prev => {
-            let newData = [...prev, newRow];
-            if (parentId !== null) {
-                newData = newData.map(row => row.id === parentId ? { ...row, isExpanded: true } : row);
-            }
-            return newData;
-        });
-        closeContextMenu();
+        setData(prev => parentId !== null ? prev.map(r => r.id === parentId ? { ...r, isExpanded: true } : r).concat(newRow) : [...prev, newRow]);
+        setRowContextMenu(p => ({ ...p, visible: false }));
     };
 
-    const toggleExpand = (id: string, e: React.MouseEvent) => {
+    const toggleExpand = (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
-        setData(prev => {
-            const target = prev.find(r => r.id === id);
-            const newState = target ? !target.isExpanded : true;
-            return prev.map(row => row.id === id ? { ...row, isExpanded: newState } : row);
-        });
+        setData(prev => prev.map(r => r.id === id ? { ...r, isExpanded: !r.isExpanded } : r));
     };
 
-    const handleDragStart = (e: React.DragEvent, index: number) => {
-        if (!isHandleDragging) {
-            e.preventDefault();
-            return;
-        }
-        setDraggedIdx(index);
-        const img = new Image();
-        img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-        e.dataTransfer.setDragImage(img, 0, 0);
-        closeContextMenu();
-    };
-
-    const handleDragOver = (e: React.DragEvent, index: number) => {
-        e.preventDefault();
-        if (draggedIdx === null) return;
-        if (dropTargetIdx !== index) {
-            setDropTargetIdx(index);
-        }
-    };
-
-    const handleDrop = (targetIdx: number) => {
-        if (draggedIdx === null || draggedIdx === targetIdx) {
-            resetDragState();
-            return;
-        }
-        const originalFromIdx = columns.findIndex(c => c.key === visibleColumns[draggedIdx].key);
-        const originalToIdx = columns.findIndex(c => c.key === visibleColumns[targetIdx].key);
-        moveColumn(originalFromIdx, originalToIdx);
-        resetDragState();
-    };
-
-    const resetDragState = () => {
-        setDraggedIdx(null);
-        setDropTargetIdx(null);
-        setIsHandleDragging(false);
-    };
-
-    const getDropIndicatorClass = (index: number) => (draggedIdx !== null && dropTargetIdx !== null && index === dropTargetIdx && draggedIdx !== dropTargetIdx) ? 'drop-indicator-both' : '';
-
-    const handleCellChange = (rowId: string, col: ColumnConfig, rawValue: string) => {
+    const handleCellChange = (rowId: number, col: ColumnConfig, val: string) => {
         setData(prev => prev.map(row => {
             if (row.id !== rowId) return row;
-            const updatedRow = { ...row };
-            (updatedRow as any)[col.key] = rawValue;
-            return updatedRow;
+            const updated = { ...row, [col.key]: val };
+            if (col.key === 'manufacturingMethod') {
+                if (val === 'Purchased externally') {
+                    updated.group = 'Purchased part';
+                } else if (row.manufacturingMethod === 'Purchased externally') {
+                    updated.group = 'Unique part';
+                    updated.producer = '';
+                }
+            }
+            return updated;
         }));
     };
 
-    const moveColumn = (fromIdx: number, toIdx: number) => {
-        if (toIdx < 0 || toIdx >= columns.length) return;
-        const updatedColumns = [...columns];
-        const [movedItem] = updatedColumns.splice(fromIdx, 1);
-        updatedColumns.splice(toIdx, 0, movedItem);
-        setColumns(updatedColumns);
-    };
-
-    const handleContextMenu = (e: React.MouseEvent, key: string) => {
-        e.preventDefault();
-        const originalIndex = columns.findIndex(c => c.key === key);
-        setContextMenu({ visible: true, x: e.clientX, y: e.clientY, columnIndex: originalIndex });
-    };
-
-    const closeContextMenu = () => {
-        setContextMenu(prev => ({ ...prev, visible: false }));
-        setRowContextMenu(prev => ({ ...prev, visible: false }));
-    };
-
-    const handleRowContextMenu = (e: React.MouseEvent, rowId: string) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setRowContextMenu({ visible: true, x: e.clientX, y: e.clientY, rowId });
-    };
-
-    const handleDeleteRowClick = () => {
+    const handleDeleteRow = () => {
         if (rowContextMenu.rowId !== null) {
-            const idsToDelete = new Set<string>();
+            const idsToDelete = new Set<number>();
             const queue = [rowContextMenu.rowId];
             while (queue.length > 0) {
-                const currentId = queue.shift()!;
-                idsToDelete.add(currentId);
-                data.forEach(row => { if (row.parentId === currentId) queue.push(row.id); });
+                const cur = queue.shift()!;
+                idsToDelete.add(cur);
+                data.forEach(r => r.parentId === cur && queue.push(r.id));
             }
-            setData(prev => prev.filter(row => !idsToDelete.has(row.id)));
+            setData(prev => prev.filter(r => !idsToDelete.has(r.id)));
         }
-        closeContextMenu();
+        setRowContextMenu(p => ({ ...p, visible: false }));
+    };
+
+    const getStatusClass = (status: string) => {
+        switch (status) {
+            case 'Not Started': return 'status-bg-gray';
+            case 'In Design': return 'status-bg-purple';
+            case 'In Review': return 'status-bg-blue';
+            case 'In Production': return 'status-bg-yellow';
+            case 'Completed': return 'status-bg-green';
+            default: return '';
+        }
     };
 
     return (
-        <div className="table-page-container" onClick={closeContextMenu}>
+        <div className="table-page-container" onClick={() => { setContextMenu(p => ({ ...p, visible: false })); setRowContextMenu(p => ({ ...p, visible: false })); }}>
             <div className="table-header-section">
                 <h2>BOM Table</h2>
+                <div className="metadata-tag">
+                    <div>wv: {workspaceOrVersion || 'None'}</div>
+                    <div>wvid: {workspaceOrVersionId || 'None'}</div>
+                    <div>mid: {microversionId || 'None'}</div>
+                </div>
             </div>
 
             <div className="table-controls">
-                <button type="button" onClick={() => handleAddRow('part')}>+ Add Part</button>
-                <button type="button" onClick={() => handleAddRow('subassembly')} className="btn-secondary">+ Add Subassembly</button>
+                <button onClick={() => handleAddRow('part')}>+ Add Part</button>
+                <button onClick={() => handleAddRow('subassembly')} className="btn-secondary">+ Add Subassembly</button>
+                <button onClick={() => fetchParts()} className="btn-secondary">↻ Refresh</button>
             </div>
+
+            {loading && <div style={{ padding: 12 }}>Loading BOM…</div>}
+            {error && <div style={{ padding: 12, color: '#b91c1c' }}>Failed to load parts: {error}</div>}
 
             <div className="table-wrapper" ref={wrapperRef}>
                 <table className="custom-table">
                     <colgroup>
-                        {visibleColumns.map((col, idx) => {
-                            const isLast = idx === visibleColumns.length - 1;
-                            const width =
-                                columnWidths[col.key] ??
-                                (isLast && autoLastColWidth !== null ? autoLastColWidth : DEFAULT_COL_WIDTH);
-                            return <col key={col.key} style={{ width }} />;
-                        })}
+                        {visibleColumns.map((col, idx) => (
+                            <col key={col.key} style={{ width: columnWidths[col.key] ?? (idx === visibleColumns.length - 1 && autoLastColWidth !== null ? autoLastColWidth : DEFAULT_COL_WIDTH) }} />
+                        ))}
                     </colgroup>
                     <thead>
                         <tr>
                             {visibleColumns.map((col, index) => (
-                                <th
-                                    key={col.key}
-                                    draggable={isHandleDragging}
-                                    onDragStart={(e) => handleDragStart(e, index)}
-                                    onDragOver={(e) => handleDragOver(e, index)}
-                                    onDrop={() => handleDrop(index)}
-                                    onDragEnd={resetDragState}
-                                    onContextMenu={(e) => handleContextMenu(e, col.key)}
-                                    className={`table-th ${draggedIdx === index ? 'dragging-active' : ''} ${getDropIndicatorClass(index)}`}
-                                >
+                                <th key={col.key} draggable={isHandleDragging} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ visible: true, x: e.clientX, y: e.clientY, columnIndex: columns.findIndex(c => c.key === col.key) }); }} className="table-th">
                                     <div className="th-content-wrapper">
                                         <span className="th-text">{col.label}</span>
                                         <div className="grid-drag-handle" draggable onMouseDown={() => setIsHandleDragging(true)} onMouseUp={() => setIsHandleDragging(false)}>⋮⋮</div>
                                     </div>
-                                    <div
-                                        className="col-resize-handle"
-                                        onPointerDown={(e) => handleResizeStart(e, col.key)}
-                                        onDoubleClick={(e) => handleResizeDoubleClick(e, col.key, col.label)}
-                                    />
+                                    <div className="col-resize-handle" onPointerDown={(e) => handleResizeStart(e, col.key)} />
                                 </th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
                         {visibleData.map((row, rowIndex) => {
-                            const isSubassembly = row.type === 'subassembly';
-
+                            const isSub = row.type === 'subassembly';
+                            const isPurchased = row.manufacturingMethod === 'Purchased externally';
                             return (
-                                <tr key={row.id} className="table-tr" onContextMenu={(e) => handleRowContextMenu(e, row.id)}>
+                                <tr key={row.id} className="table-tr" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setRowContextMenu({ visible: true, x: e.clientX, y: e.clientY, rowId: row.id }); }}>
                                     {visibleColumns.map((col, colIndex) => {
-                                        const displayValue: string = row[col.key as keyof RowData] as string || '';
+                                        let isDisabled = isSub && !['partId', 'partName', 'quantity', 'group', 'manufacturingStatus', 'comments', 'projectName', 'whereUsed'].includes(col.key);
+                                        if (col.key === 'producer' && !isPurchased) isDisabled = true;
+                                        if (col.key === 'group' && (isSub || isPurchased)) isDisabled = true;
+                                        const val = row[col.key] as string | number;
 
                                         return (
-                                            <td key={col.key} className={`table-td ${getDropIndicatorClass(colIndex)}`}>
+                                            <td key={col.key} className={`table-td ${isDisabled ? 'cell-disabled' : ''}`}>
                                                 <div className="td-content-wrapper" style={colIndex === 0 ? { paddingLeft: `${row.level * 24}px` } : {}}>
-                                                    {colIndex === 0 && isSubassembly && (
-                                                        <button type="button" className="expand-toggle" onClick={(e) => toggleExpand(row.id, e)}>{row.isExpanded ? '▼' : '▶'}</button>
-                                                    )}
-                                                    {colIndex === 0 && !isSubassembly && <span className="expand-placeholder"></span>}
+                                                    {colIndex === 0 && isSub && <button className="expand-toggle" onClick={(e) => toggleExpand(row.id, e)}>{row.isExpanded ? '▼' : '▶'}</button>}
+                                                    {colIndex === 0 && !isSub && <span className="expand-placeholder"></span>}
 
-                                                    <input
-                                                        data-row={rowIndex}
-                                                        data-col={colIndex}
-                                                        type="text"
-                                                        value={displayValue}
-                                                        onChange={(e) => handleCellChange(row.id, col, e.target.value)}
-                                                        onFocus={(e) => e.target.select()}
-                                                        onKeyDown={(e) => handleCellKeyDown(e, rowIndex, colIndex)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        className="cell-input"
-                                                    />
+                                                    {col.type === 'select' ? (
+                                                        <select data-row={rowIndex} data-col={colIndex} value={val} onChange={(e) => handleCellChange(row.id, col, e.target.value)} onKeyDown={(e) => handleCellKeyDown(e, rowIndex, colIndex)} onClick={(e) => e.stopPropagation()} className={`cell-input cell-select ${col.key === 'manufacturingStatus' ? getStatusClass(val as string) : ''}`} disabled={isDisabled}>
+                                                            <option value="" disabled hidden>Select...</option>
+                                                            {(col.key === 'manufacturingStatus' ? (isSub ? ASSEMBLY_STATUS_OPTIONS : PART_STATUS_OPTIONS) : col.options)?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                            {col.key === 'group' && (isSub || isPurchased) && <option value={val}>{val}</option>}
+                                                        </select>
+                                                    ) : (
+                                                        <input data-row={rowIndex} data-col={colIndex} type="text" value={val} onChange={(e) => handleCellChange(row.id, col, e.target.value)} onFocus={(e) => e.target.select()} onKeyDown={(e) => handleCellKeyDown(e, rowIndex, colIndex)} onClick={(e) => e.stopPropagation()} className="cell-input" disabled={isDisabled} />
+                                                    )}
                                                 </div>
                                             </td>
                                         );
@@ -463,37 +422,30 @@ export const OnshapeBomPage: FC = () => {
                                 </tr>
                             );
                         })}
-                        {visibleData.length === 0 && (
-                            <tr>
-                                <td colSpan={visibleColumns.length} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-                                    No items in BOM. Add a part or subassembly to begin.
-                                </td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
             </div>
 
             {contextMenu.visible && (
                 <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => { if (contextMenu.columnIndex > 0) moveColumn(contextMenu.columnIndex, contextMenu.columnIndex - 1); closeContextMenu(); }} disabled={contextMenu.columnIndex === 0}>Move Left</button>
-                    <button type="button" onClick={() => { if (contextMenu.columnIndex < columns.length - 1) moveColumn(contextMenu.columnIndex, contextMenu.columnIndex + 1); closeContextMenu(); }} disabled={contextMenu.columnIndex === columns.length - 1}>Move Right</button>
+                    <button onClick={() => { if (contextMenu.columnIndex > 0) { const u = [...columns]; const [m] = u.splice(contextMenu.columnIndex, 1); u.splice(contextMenu.columnIndex - 1, 0, m); setColumns(u); } setContextMenu(p => ({ ...p, visible: false })); }} disabled={contextMenu.columnIndex === 0}>Move Left</button>
+                    <button onClick={() => { if (contextMenu.columnIndex < columns.length - 1) { const u = [...columns]; const [m] = u.splice(contextMenu.columnIndex, 1); u.splice(contextMenu.columnIndex + 1, 0, m); setColumns(u); } setContextMenu(p => ({ ...p, visible: false })); }} disabled={contextMenu.columnIndex === columns.length - 1}>Move Right</button>
                 </div>
             )}
             {rowContextMenu.visible && activeContextMenuRow && (
                 <div className="context-menu" style={{ top: rowContextMenu.y, left: rowContextMenu.x }} onClick={(e) => e.stopPropagation()}>
                     {activeContextMenuRow.type === 'subassembly' && (
                         <>
-                            <button type="button" onClick={() => handleAddRow('part', activeContextMenuRow.id)}>Add Part Inside</button>
-                            <button type="button" onClick={() => handleAddRow('subassembly', activeContextMenuRow.id)}>Add Subassembly Inside</button>
+                            <button onClick={() => handleAddRow('part', activeContextMenuRow.id)}>Add Part Inside</button>
+                            <button onClick={() => handleAddRow('subassembly', activeContextMenuRow.id)}>Add Subassembly Inside</button>
                             <div className="context-divider"></div>
                         </>
                     )}
-                    <button type="button" className="delete-btn" onClick={handleDeleteRowClick}>Delete Row</button>
+                    <button onClick={handleDeleteRow} className="delete-btn">Delete Row</button>
                 </div>
             )}
         </div>
     );
 };
 
-export default OnshapeBomPage;
+export default OnshapePage;

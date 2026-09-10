@@ -1,43 +1,60 @@
 export interface RowData {
-    id: string;
+    id: number;
     type: 'part' | 'subassembly';
-    parentId: string | null;
+    parentId: number | null;
     isExpanded: boolean;
-    name: string;
-    catalogNumber: string;
-    description: string;
-    engineer: string;
+
+    projectName: string;
+    manufacturingStatus: string;
+    partId: string;
+    revision: number;
+    partName: string;
+    whereUsed: string;
+    quantity: number | string;
+    documentUrl: string;
+    material: string;
+    mass: number | string;
+    price: number | string;
+    manufacturingMethod: string;
+    producer: string;
     comments: string;
-    onshapeURL: string;
+    group: string;
 }
 
 export interface RenderRow extends RowData {
     level: number;
 }
 
-export const INITIAL_DATA: RowData[] = [
-    {
-        id: '1',
-        type: 'subassembly',
-        parentId: null,
-        isExpanded: true,
-        name: 'Main Chassis Assembly',
-        catalogNumber: 'ASM-001',
-        description: 'Primary load-bearing framework',
-        engineer: 'John Doe',
-        comments: 'Ready for review',
-        onshapeURL: '',
-    },
-    {
-        id: '2',
-        type: 'part',
-        parentId: '1',
-        isExpanded: true,
-        name: 'Side Bracket',
-        catalogNumber: 'PRT-101',
-        description: 'Aluminum mounting bracket',
-        engineer: 'Jane Smith',
-        comments: 'Tight tolerance holes',
-        onshapeURL: '',
-    }
+export interface RawBomNode {
+    id: string | number;
+    type: 'part' | 'subassembly';
+    projectName?: string;
+    manufacturingStatus?: string;
+    partId?: string;
+    revision?: number;
+    partName?: string;
+    name?: string;
+    whereUsed?: string;
+    quantity?: number | string;
+    documentUrl?: string;
+    material?: string;
+    mass?: number | string;
+    price?: number | string;
+    manufacturingMethod?: string;
+    producer?: string;
+    comments?: string;
+    group?: string;
+    children?: RawBomNode[];
+}
+
+export const PART_STATUS_OPTIONS = [
+    'Not Started', 'In Design', 'In Review', 'In Production',
+    'Partially Completed', 'Completed', 'On Hold', 'Cancelled'
 ];
+
+export const ASSEMBLY_STATUS_OPTIONS = [
+    'Not Started', 'Parts being made', 'In construction', 'On Hold', 'Completed', 'Cancelled'
+];
+
+export const MFG_METHOD_OPTIONS = ['Manually made', 'Printed in 3D', 'CNC', 'Lathe', 'Externally made', 'Milled', 'Purchased externally'];
+export const GROUP_OPTIONS = ['Unique part', 'Standard part'];
