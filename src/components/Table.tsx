@@ -21,6 +21,13 @@ interface RowContextMenuState {
     rowId: string | null;
 }
 
+export type SortDirection = 'asc' | 'desc';
+
+export interface SortConfig {
+    key: any;
+    direction: SortDirection;
+}
+
 export interface ColumnConfig {
     key: any;
     label: string;
@@ -40,9 +47,10 @@ interface TableParam {
     minLastColWidth?: number;
     defaultColWidth?: number;
     removeTopRow?: boolean;
+    initialSort?: SortConfig;
 }
 
-export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction, setData, minLastColWidth = 120, defaultColWidth = 120, removeTopRow = false }) => {
+export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction, setData, minLastColWidth = 120, defaultColWidth = 120, removeTopRow = false, initialSort }) => {
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
     const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
@@ -55,6 +63,7 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
     const [autoLastColWidth, setAutoLastColWidth] = useState<number | null>(null);
 
     const [columns, setColumns] = useState<ColumnConfig[]>(columnsData);
+    const [sortConfig, setSortConfig] = useState<SortConfig | null>(initialSort ?? null);
 
     const closeContextMenu = () => { setContextMenu(prev => ({ ...prev, visible: false })); setRowContextMenu(prev => ({ ...prev, visible: false })); };
 
@@ -228,10 +237,37 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
 
     type RenderRow = typeof data[0] & { level: number };
 
+    const sortSiblings = (rows: (RowData & any)[]): (RowData & any)[] => {
+        if (!sortConfig) return rows;
+        const { key, direction } = sortConfig;
+        const dir = direction === 'asc' ? 1 : -1;
+
+        return [...rows].sort((a, b) => {
+            const aVal = a[key];
+            const bVal = b[key];
+
+            if (aVal === bVal) return 0;
+            if (aVal === null || aVal === undefined) return 1 * dir === 0 ? 0 : 1;
+            if (bVal === null || bVal === undefined) return -1;
+
+            if (typeof aVal === 'number' && typeof bVal === 'number') {
+                return (aVal - bVal) * dir;
+            }
+
+            const aNum = Number(aVal);
+            const bNum = Number(bVal);
+            if (!isNaN(aNum) && !isNaN(bNum) && aVal !== '' && bVal !== '') {
+                return (aNum - bNum) * dir;
+            }
+
+            return String(aVal).localeCompare(String(bVal)) * dir;
+        });
+    };
+
     const getVisibleData = (): RenderRow[] => {
         const result: RenderRow[] = [];
         const addChildren = (parentId: string | null, level: number) => {
-            const children = data.filter(row => row.parentId === parentId);
+            const children = sortSiblings(data.filter(row => row.parentId === parentId));
             for (const child of children) {
                 result.push({ ...child, level })
                 if (isParent(child.id) && child.isExpanded) {
@@ -355,6 +391,15 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
         setColumns(updatedColumns);
     };
 
+    const handleSortClick = (e: React.MouseEvent, key: string) => {
+        e.stopPropagation();
+        setSortConfig(prev => {
+            if (!prev || prev.key !== key) return { key, direction: 'asc' };
+            if (prev.direction === 'asc') return { key, direction: 'desc' };
+            return null; // third click clears sorting for this column
+        });
+    };
+
     const handleContextMenu = (e: React.MouseEvent, key: string) => {
         e.preventDefault();
         const originalIndex = columns.findIndex(c => c.key === key);
@@ -448,7 +493,17 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
                                     className={`table-th ${draggedIdx === index ? 'dragging-active' : ''} ${getDropIndicatorClass(index)}`}
                                 >
                                     <div className="th-content-wrapper">
-                                        <span className="th-text">{col.label}</span>
+                                        <button
+                                            type="button"
+                                            className={`th-sort-btn ${sortConfig?.key === col.key ? 'sort-active' : ''}`}
+                                            onClick={(e) => handleSortClick(e, col.key)}
+                                            title="Sort by this column"
+                                        >
+                                            <span className="th-text">{col.label}</span>
+                                            <span className="sort-indicator">
+                                                {sortConfig?.key === col.key ? (sortConfig!.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                            </span>
+                                        </button>
                                         <div className="grid-drag-handle" draggable onMouseDown={() => setIsHandleDragging(true)} onMouseUp={() => setIsHandleDragging(false)}>⋮⋮</div>
                                     </div>
                                     <div

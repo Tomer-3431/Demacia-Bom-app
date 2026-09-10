@@ -126,6 +126,50 @@
   white-space: nowrap;
 }
 
+.th-sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.th-sort-btn:hover {
+  background-color: #334155;
+  color: #f1f5f9;
+}
+
+.th-sort-btn .th-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sort-indicator {
+  font-size: 0.7rem;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.th-sort-btn.sort-active .sort-indicator {
+  color: #3b82f6;
+}
+
+.th-sort-btn:hover .sort-indicator {
+  color: #93c5fd;
+}
+
 .grid-drag-handle {
   cursor: grab;
   color: #64748b;
