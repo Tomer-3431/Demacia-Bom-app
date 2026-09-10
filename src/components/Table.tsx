@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AuthenticatedImage } from "../services/api";
 
 export interface RowData {
     id: string;
@@ -23,11 +24,12 @@ interface RowContextMenuState {
 export interface ColumnConfig {
     key: any;
     label: string;
-    type: 'string' | 'number' | 'select' | 'boolean' | 'button';
+    type: 'string' | 'number' | 'select' | 'boolean' | 'button' | 'image';
     buttonText?: string;
     onButtonClick?: (row: RowData & any) => void;
     options?: string[];
     isDisabled?: (row: RowData & any) => boolean;
+    apiPath?: string | ((value: any) => string);
 }
 
 interface TableParam {
@@ -504,6 +506,16 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
                                                         >
                                                             {col.buttonText || "Action"}
                                                         </button>
+                                                    ) : col.type === 'image' ? (
+                                                        (() => (
+                                                            <div className="w-8 h-8 rounded overflow-hidden bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 my-1">
+                                                                <AuthenticatedImage
+                                                                    src={row[col.key]}
+                                                                    alt={col.label || "Image"}
+                                                                    className="w-full h-full object-cover" />
+                                                            </div>
+                                                        ))()
+
                                                     ) : col.type === 'boolean' ? (
                                                         <input
                                                             type="checkbox"
