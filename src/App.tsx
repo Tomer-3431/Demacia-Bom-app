@@ -1,12 +1,12 @@
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import './css/App.css';
 import MainLayout from './components/MainLayout';
-import OnshapePage from './onshape/OnshapePage';
 import CreateBomPage from './pages/CreateBomPage';
 import CreatePartPage from './pages/CreatePartPage';
 import HomeScreen from './home/HomePage';
 import BomDetailsPage from './Bom/BomDetailsPage';
 import WorkOrderDetailsPage from './WorkOrder/WorkOrderDetailsPage';
+import OnshapeBomPage from './onshape/OnshapeBomPage';
 
 export default function App() {
   return (
@@ -15,7 +15,7 @@ export default function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomeScreen />} />
           <Route path="/home" element={<HomeScreen />} />
-          <Route path="/onshape" element={<OnshapePage />} />
+          <Route path="/onshape" element={<OnshapeBomPage />} />
           <Route path="/new-bom" element={<CreateBomPage />} />
           <Route path="/new-part" element={<CreatePartPage />} />
           <Route path="/bom/:bomId" element={<BomDetailsPage />} />
