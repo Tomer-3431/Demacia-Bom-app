@@ -7,6 +7,7 @@ import CreatePartPage from './pages/CreatePartPage';
 import HomeScreen from './home/HomePage';
 import BomDetailsPage from './Bom/BomDetailsPage';
 import WorkOrderDetailsPage from './WorkOrder/WorkOrderDetailsPage';
+import PartsSearchPage from './searchParts/SearchParts';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/new-part" element={<CreatePartPage />} />
           <Route path="/bom/:bomId" element={<BomDetailsPage />} />
           <Route path="/workOrder/:workOrderID" element={<WorkOrderDetailsPage />} />
+          <Route path="/partSearch" element={<PartsSearchPage />} />
 
           <Route path="*" element={<HomeScreen />} />
         </Route>
