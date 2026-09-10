@@ -1,32 +1,8 @@
 import type { FC } from "react";
 import { useState, useEffect, useRef } from "react";
-import "../css/Table.css";
-
-interface RowData {
-    id: string;
-    type: 'part' | 'subassembly';
-    parentId: string | null;
-    isExpanded: boolean;
-    name: string;
-    catalogNumber: string;
-    description: string;
-    engineer: string;
-    comments: string;
-    onshapeURL: string;
-}
-
-interface RenderRow extends RowData {
-    level: number;
-}
-
-type ColumnKey = keyof Omit<RowData, 'id' | 'type' | 'parentId' | 'isExpanded'>;
-
-interface ColumnConfig {
-    key: ColumnKey;
-    label: string;
-    type: 'string' | 'number' | 'select';
-    options?: string[];
-}
+import { type RowData, type RenderRow, INITIAL_DATA } from "./TableDefs/bomRows";
+import { type ColumnConfig, INITIAL_COLUMNS } from "./TableDefs/bomColumns";
+import '../css/Table.css';
 
 interface ContextMenuState {
     visible: boolean;
@@ -45,44 +21,9 @@ interface RowContextMenuState {
 const MIN_LAST_COL_WIDTH = 120;
 const DEFAULT_COL_WIDTH = 120;
 
-const INITIAL_DATA: RowData[] = [
-    {
-        id: '1',
-        type: 'subassembly',
-        parentId: null,
-        isExpanded: true,
-        name: 'Main Chassis Assembly',
-        catalogNumber: 'ASM-001',
-        description: 'Primary load-bearing framework',
-        engineer: 'John Doe',
-        comments: 'Ready for review',
-        onshapeURL: '',
-    },
-    {
-        id: '2',
-        type: 'part',
-        parentId: '1',
-        isExpanded: true,
-        name: 'Side Bracket',
-        catalogNumber: 'PRT-101',
-        description: 'Aluminum mounting bracket',
-        engineer: 'Jane Smith',
-        comments: 'Tight tolerance holes',
-        onshapeURL: '',
-    }
-];
-
-export const BomPage: FC = () => {
+export const OnshapeBomPage: FC = () => {
     const [data, setData] = useState<RowData[]>(INITIAL_DATA);
-
-    const [columns, setColumns] = useState<ColumnConfig[]>([
-        { key: 'name', label: 'Name', type: 'string' },
-        { key: 'catalogNumber', label: 'Catalog Number', type: 'string' },
-        { key: 'description', label: 'Description', type: 'string' },
-        { key: 'engineer', label: 'Engineer', type: 'string' },
-        { key: 'comments', label: 'Comments', type: 'string' },
-        { key: 'onshapeURL', label: 'Onshape URL', type: 'string' },
-    ]);
+    const [columns, setColumns] = useState<ColumnConfig[]>(INITIAL_COLUMNS);
 
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
@@ -555,4 +496,4 @@ export const BomPage: FC = () => {
     );
 };
 
-export default BomPage;
+export default OnshapeBomPage;
