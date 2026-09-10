@@ -111,21 +111,37 @@ const DEFAULT_COL_WIDTH = 120;
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5050';
 
 const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
-    if (!json) return [];
-    if (Array.isArray(json)) return json;
-    
-    const bomTable = json.bomTable || json.bom || json;
-    const items = bomTable.items || json.items || json.data || json.parts || [];
-    if (!Array.isArray(items)) return [];
+    console.log("[Onshape REST] Parsing raw Onshape BOM payload:", json);
+    const bomTable = json.bomTable || json;
+    const items = bomTable.items || json.items || (Array.isArray(json) ? json : []);
 
     const parseItems = (itemList: any[]): RawBomNode[] => {
         return itemList.map((item, idx) => {
             const values = item.headerIdToValue || item.propertyValues || {};
             const name = values.name || values.Name || item.name || item.partName || `Part ${idx + 1}`;
             
-            // Look for nested children in Onshape's response structure
-            const hasChildren = Boolean((item.children && Array.isArray(item.children) && item.children.length > 0) || (item.items && Array.isArray(item.items) && item.items.length > 0));
-            const subItems = item.children || item.items || [];
+            // Extract the material display name correctly from Onshape's property object
+            let materialVal = '';
+            const rawMaterial = values.material || values.Material || values.MATERIAL || item.material;
+            if (rawMaterial) {
+                if (typeof rawMaterial === 'object' && rawMaterial !== null) {
+                    materialVal = rawMaterial.displayName || rawMaterial.name || rawMaterial.title || '';
+                } else {
+                    materialVal = String(rawMaterial);
+                }
+            } else {
+                const materialKey = Object.keys(values).find(k => k.toLowerCase().includes('material'));
+                if (materialKey) {
+                    const val = values[materialKey];
+                    if (typeof val === 'object' && val !== null) {
+                        materialVal = val.displayName || val.name || val.title || '';
+                    } else {
+                        materialVal = String(val);
+                    }
+                }
+            }
+
+            const hasChildren = Boolean(item.children && item.children.length > 0);
 
             return {
                 id: item.id || `onshape_item_${idx}_${Math.random()}`,
@@ -134,12 +150,12 @@ const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
                 partId: String(values.partNumber || values.PartNumber || values.itemCode || item.partId || ''),
                 revision: Number(values.revision || values.Revision || item.revision || 1),
                 quantity: values.quantity || values.Quantity || item.quantity || 1,
-                material: typeof values.material === 'object' ? (values.material?.displayName || '') : String(values.material || item.material || ''),
+                material: materialVal,
                 mass: values.mass || values.Mass || item.mass || 0,
                 manufacturingStatus: String(values.state || values.status || item.manufacturingStatus || 'In Design'),
                 manufacturingMethod: String(values.vendor || values.mfgMethod || item.manufacturingMethod || ''),
                 comments: String(values.description || values.note || item.comments || ''),
-                children: subItems.length > 0 ? parseItems(subItems) : []
+                children: item.children ? parseItems(item.children) : []
             };
         });
     };
