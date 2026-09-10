@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AuthenticatedImage } from "../services/api";
+import { AuthenticatedImage } from "../util/ApiService";
 
 export interface RowData {
     id: string;
@@ -652,3 +652,5 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
         </div>
     );
 }
+
+export default Table;
