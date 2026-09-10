@@ -17,17 +17,6 @@
   color: #f8fafc;
 }
 
-.metadata-tag {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  background-color: #1e293b;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid #334155;
-  display: inline-flex;
-  gap: 12px;
-}
-
 /* =========================================
    Controls & Buttons
 ========================================= */
@@ -83,7 +72,7 @@
   margin-top: 16px;
   border: 1px solid #334155;
   border-radius: 8px;
-  overflow-x: auto; /* Enables horizontal scrolling */
+  overflow-x: auto;
   overflow-y: hidden;
   background-color: #1e293b;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
@@ -92,9 +81,9 @@
 
 .custom-table {
   border-collapse: collapse;
-  width: max-content; /* Table grows as wide as the columns force it */
-  min-width: 100%; /* Fills the wrapper if columns are small */
-  table-layout: fixed; /* Respects exact th widths set by resizer */
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
   font-size: 0.875rem;
 }
 
@@ -126,50 +115,6 @@
   white-space: nowrap;
 }
 
-.th-sort-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  font: inherit;
-  font-weight: 600;
-  color: inherit;
-  cursor: pointer;
-  border-radius: 4px;
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.th-sort-btn:hover {
-  background-color: #334155;
-  color: #f1f5f9;
-}
-
-.th-sort-btn .th-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sort-indicator {
-  font-size: 0.7rem;
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.th-sort-btn.sort-active .sort-indicator {
-  color: #3b82f6;
-}
-
-.th-sort-btn:hover .sort-indicator {
-  color: #93c5fd;
-}
-
 .grid-drag-handle {
   cursor: grab;
   color: #64748b;
@@ -192,7 +137,7 @@
 .col-resize-handle {
   position: absolute;
   top: 0;
-  right: -2px; /* Pull it exactly to the edge */
+  right: -2px;
   bottom: 0;
   width: 5px;
   cursor: col-resize;
@@ -202,7 +147,7 @@
 
 .col-resize-handle:hover,
 .col-resize-handle:active {
-  background-color: #3b82f6; /* Highlight on hover/drag */
+  background-color: #3b82f6;
 }
 
 .dragging-active {
@@ -266,25 +211,6 @@
   border-color: #3b82f6;
 }
 
-.cell-disabled {
-  background-color: #1a2235;
-}
-
-.cell-input:disabled {
-  color: #475569;
-  cursor: not-allowed;
-}
-
-/* Remove native spinner arrows on numeric cell inputs */
-.cell-input[type="number"]::-webkit-outer-spin-button,
-.cell-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.cell-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
 /* =========================================
    Hierarchy / Subassembly Expander
 ========================================= */
@@ -313,65 +239,8 @@
 
 .expand-placeholder {
   display: inline-block;
-  width: 32px; /* matching toggle width + margins */
+  width: 32px;
   flex-shrink: 0;
-}
-
-/* =========================================
-   Select Inputs & Status Colors
-========================================= */
-.cell-select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px top 50%;
-  background-size: 10px auto;
-  padding-right: 32px;
-}
-
-.cell-select:disabled {
-  background-image: none;
-}
-
-.cell-select option {
-  background-color: #1e293b;
-  color: #f1f5f9;
-}
-
-/* Status Colors (Full Cell Fill) */
-.cell-select.status-bg-gray { background-color: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
-.cell-select.status-bg-purple { background-color: rgba(168, 85, 247, 0.15); color: #d8b4fe; }
-.cell-select.status-bg-blue { background-color: rgba(59, 130, 246, 0.15); color: #93c5fd; }
-.cell-select.status-bg-yellow { background-color: rgba(234, 179, 8, 0.15); color: #fde047; }
-.cell-select.status-bg-light-green { background-color: rgba(134, 239, 172, 0.15); color: #86efac; }
-.cell-select.status-bg-green { background-color: rgba(34, 197, 94, 0.15); color: #4ade80; }
-.cell-select.status-bg-orange { background-color: rgba(249, 115, 22, 0.15); color: #fdba74; }
-.cell-select.status-bg-red { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; }
-/* Additional Assembly Status Colors */
-.cell-select.status-bg-cyan { background-color: rgba(6, 182, 212, 0.15); color: #67e8f9; }
-.cell-select.status-bg-orange { background-color: rgba(249, 115, 22, 0.15); color: #fdba74; }
-
-/* Include them in the focus state override */
-.cell-select.status-bg-cyan:focus,
-.cell-select.status-bg-orange:focus {
-  border-color: transparent;
-  box-shadow: inset 0 0 0 1px #3b82f6;
-}
-
-/* Focus state for colored status cells */
-.cell-select.status-bg-gray:focus,
-.cell-select.status-bg-purple:focus,
-.cell-select.status-bg-blue:focus,
-.cell-select.status-bg-yellow:focus,
-.cell-select.status-bg-light-green:focus,
-.cell-select.status-bg-green:focus,
-.cell-select.status-bg-orange:focus,
-.cell-select.status-bg-red:focus {
-  border-color: transparent;
-  box-shadow: inset 0 0 0 1px #3b82f6; 
 }
 
 /* =========================================
