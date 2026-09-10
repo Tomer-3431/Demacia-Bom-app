@@ -111,15 +111,21 @@ const DEFAULT_COL_WIDTH = 120;
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5050';
 
 const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
-    console.log("[Onshape REST] Parsing raw Onshape BOM payload:", json);
-    const bomTable = json.bomTable || json;
-    const items = bomTable.items || json.items || (Array.isArray(json) ? json : []);
+    if (!json) return [];
+    if (Array.isArray(json)) return json;
+    
+    const bomTable = json.bomTable || json.bom || json;
+    const items = bomTable.items || json.items || json.data || json.parts || [];
+    if (!Array.isArray(items)) return [];
 
     const parseItems = (itemList: any[]): RawBomNode[] => {
         return itemList.map((item, idx) => {
             const values = item.headerIdToValue || item.propertyValues || {};
             const name = values.name || values.Name || item.name || item.partName || `Part ${idx + 1}`;
-            const hasChildren = Boolean(item.children && item.children.length > 0);
+            
+            // Look for nested children in Onshape's response structure
+            const hasChildren = Boolean((item.children && Array.isArray(item.children) && item.children.length > 0) || (item.items && Array.isArray(item.items) && item.items.length > 0));
+            const subItems = item.children || item.items || [];
 
             return {
                 id: item.id || `onshape_item_${idx}_${Math.random()}`,
@@ -133,7 +139,7 @@ const parseOnshapeBomResponse = (json: any): RawBomNode[] => {
                 manufacturingStatus: String(values.state || values.status || item.manufacturingStatus || 'In Design'),
                 manufacturingMethod: String(values.vendor || values.mfgMethod || item.manufacturingMethod || ''),
                 comments: String(values.description || values.note || item.comments || ''),
-                children: item.children ? parseItems(item.children) : []
+                children: subItems.length > 0 ? parseItems(subItems) : []
             };
         });
     };
