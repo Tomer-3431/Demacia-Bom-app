@@ -24,7 +24,7 @@ app.use(cors({
 app.use(express.json());
 app.use(morgan("dev"));
 
-app.use('/api', checkAuth, apiRoutes)
+app.use('/api', /*checkAuth,*/ apiRoutes)
 
 app.use((req, res) => {
     res.status(404).json({ message: `Route ${req.method} ${req.originalUrl} not found`});
