@@ -30,7 +30,7 @@ const workOrderSchema = new mongoose.Schema(
     comments: { type: String },
     workOrderCreated: { type: Date },
   },
-  { timestamps: true },
+  { _id: false, timestamps: true },
 );
 
 const WorkOrder = mongoose.model('Work Order', workOrderSchema);

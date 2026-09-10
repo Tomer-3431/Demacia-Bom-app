@@ -44,7 +44,7 @@ export async function getWorkOrderByID(
 ) {
   try {
     const id = req.params.id;
-    const workOrder = WorkOrder.findOne({ id: id });
+    const workOrder = await WorkOrder.findOne({ id: id });
     if (!workOrder)
       return res.status(404).json({ message: `Work Order ${id} not found` });
     return res.status(200).json(workOrder);
@@ -61,7 +61,7 @@ export async function upsertWorkOrderByID(
   try {
     const id = req.params.id;
     const existing = await WorkOrder.findOne({ id: id });
-    const workOrder = await WorkOrder.findByIdAndUpdate(
+    const workOrder = await WorkOrder.findOneAndUpdate(
       { id: id },
       { ...req.body, id: id },
       {
