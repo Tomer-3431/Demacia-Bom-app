@@ -1,10 +1,8 @@
-export interface OnshapeID {
-  documentID?: string;
-  wvmType?: string;
-  wvmID?: string;
-  elementID?: string;
-  bomID?: string;
-  partID?: string;
+interface OnshapeID {
+  documentID: string;
+  wvmType: string;
+  wvmID: string;
+  elementID: string;
 }
 
 export interface BomModel {
@@ -16,9 +14,11 @@ export interface BomModel {
   comments?: string;
   onshapeURL?: string;
   avatarID?: string;
-  onshapeID?: OnshapeID;
+  onshapeID?: OnshapeID & { bomID: string};
   parts: { partID: string; quantity: number }[];
   subAssemblies: { bomID: string; quantity: number }[];
+  updatedAt?: Date;
+  createdAt?: Date;
 }
 
 export interface PartModel {
@@ -36,7 +36,9 @@ export interface PartModel {
   avatarID?: string;
   stlLink?: string;
   parasolidLink?: string;
-  onshapeID?: OnshapeID;
+  onshapeID?: OnshapeID & { partID: string};
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface WorkorderPartModel {
@@ -46,18 +48,21 @@ export interface WorkorderPartModel {
   statusCode?: number;
   productionGCOwner?: string;
   productionMakingOwner?: string;
-  lastUpdate?: Date;
-  firstAdded?: Date;
+  updatedAt?: Date;
+  createdAt?: Date;
 }
 
 export interface WorkorderModel {
   id: string;
   name?: string;
   bomID?: string;
+  bomName?: string;
+  catalogNumber?: string;
   workOrderOwner?: string;
   description?: string;
   parts?: WorkorderPartModel[];
   avatarID?: string;
   comments?: string;
-  workOrderCreated?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
