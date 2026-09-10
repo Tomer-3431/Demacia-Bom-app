@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { AuthenticatedImage } from "../util/ApiService";
-import type BomSummary from "./BomSummery";
+import type { BomSummary } from "./HomePage";
 
 export const BomCard: React.FC<{ bom: BomSummary }> = ({ bom }) => {
     const navigate = useNavigate();
