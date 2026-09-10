@@ -1,4 +1,3 @@
-
 export interface OnshapeID {
   documentID?: string;
   wvmType?: string;
@@ -40,22 +39,24 @@ export interface PartModel {
   onshapeID?: OnshapeID;
 }
 
+export interface WorkorderPartModel {
+  partID: string;
+  quantityTotal?: number;
+  quantityMade?: number;
+  statusCode?: number;
+  productionGCOwner?: string;
+  productionMakingOwner?: string;
+  lastUpdate?: Date;
+  firstAdded?: Date;
+}
+
 export interface WorkorderModel {
   id: string;
   name?: string;
   bomID?: string;
   workOrderOwner?: string;
   description?: string;
-  parts?: {
-    partID: string;
-    quantityTotal?: number;
-    quantityMade?: number;
-    statusCode?: number;
-    productionGCOwner?: string;
-    productionMakingOwner?: string;
-    lastUpdate?: Date;
-    firstAdded?: Date;
-  }[];
+  parts?: WorkorderPartModel[];
   avatarID?: string;
   comments?: string;
   workOrderCreated?: Date;

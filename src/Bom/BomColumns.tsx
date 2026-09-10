@@ -1,8 +1,8 @@
 import type { ColumnConfig } from "../components/Table";
 import { downloadFile } from "../util/ApiService";
-import type TableRow from "./BomTableRow";
+import type BomTableRow from "./BomTableRow";
 
-export const BomColumns: ColumnConfig[] = [
+const BomColumns: ColumnConfig[] = [
   { key: "avatar", label: "Avatar", type: "image" },
   { key: "name", label: "Name", type: "string" },
   { key: "description", label: "Description", type: "string" },
@@ -38,7 +38,7 @@ export const BomColumns: ColumnConfig[] = [
     type: "button",
     buttonText: "Download",
     isDisabled: () => true,
-    onButtonClick: (row: TableRow) => {
+    onButtonClick: (row: BomTableRow) => {
       if (row.exportSTL) {
         const downloadUrl = `http://localhost:5050/api/drive/file/${row.exportSTL}`;
         downloadFile(downloadUrl, `${row.name || "part"}.stl`);
@@ -51,7 +51,7 @@ export const BomColumns: ColumnConfig[] = [
     type: "button",
     buttonText: "Download",
     isDisabled: () => true,
-    onButtonClick: (row: TableRow) => {
+    onButtonClick: (row: BomTableRow) => {
       if (row.exportParasolid) {
         const downloadUrl = `http://localhost:5050/api/drive/file/${row.exportParasolid}`;
         downloadFile(downloadUrl, `${row.name || "part"}.parasolid`);

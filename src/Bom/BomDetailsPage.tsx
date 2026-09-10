@@ -3,13 +3,13 @@ import { useParams } from "react-router-dom";
 import Table from "../components/Table";
 import { fetchFromApi, type ApiError } from "../util/ApiService";
 import type { BomModel, PartModel } from "../util/Models";
-import type TableRow from "./BomTableRow";
+import type BomTableRow from "./BomTableRow";
 import MainBomDataUI from "./MainBomDataUI";
 import BomColumns from "./BomColumns";
 
 export default function BomDetailsPage() {
   const { bomId } = useParams<{ bomId: string }>();
-  const [rows, setRows] = useState<TableRow[]>([]);
+  const [rows, setRows] = useState<BomTableRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [mainBomData, setMainBomData] = useState<BomModel | null>(null);
@@ -30,14 +30,14 @@ export default function BomDetailsPage() {
     async function fetchBomRecursively(
       targetBomId: string,
       parentId: string | null = null
-    ): Promise<TableRow[]> {
+    ): Promise<BomTableRow[]> {
       if (visitedBoms.has(targetBomId)) return [];
       visitedBoms.add(targetBomId);
 
       const bom = await fetchFromApi<BomModel>(`/db/bom/id/${targetBomId}`);
       const currentAssemblyRowId = `${parentId ? parentId + "-" : ""}${bom.id}`;
 
-      const assemblyRow: TableRow = {
+      const assemblyRow: BomTableRow = {
         id: currentAssemblyRowId,
         parentId: parentId,
         isExpanded: true,
@@ -62,7 +62,7 @@ export default function BomDetailsPage() {
         exportParasolid: "",
       };
 
-      const collectedRows: TableRow[] = targetBomId === bomId ? [] : [assemblyRow];
+      const collectedRows: BomTableRow[] = targetBomId === bomId ? [] : [assemblyRow];
 
       for (const sub of bom.subAssemblies || []) {
         const subRows = await fetchBomRecursively(sub.bomID, currentAssemblyRowId);
@@ -71,7 +71,7 @@ export default function BomDetailsPage() {
 
       for (const p of bom.parts || []) {
         const part = await fetchFromApi<PartModel>(`/db/part/id/${p.partID}`);
-        const partRow: TableRow = {
+        const partRow: BomTableRow = {
           id: `${currentAssemblyRowId}-part-${part.id}`,
           parentId: currentAssemblyRowId === bomId ? null : currentAssemblyRowId,
           isExpanded: false,
@@ -127,7 +127,7 @@ export default function BomDetailsPage() {
           data={rows}
           columnsData={BomColumns}
           setData={(newData) => {
-            return setRows(newData as TableRow[]);
+            return setRows(newData as BomTableRow[]);
           }}
           newRowFunction={undefined}
           initialSort={{ key: "catalogNumber", direction: "asc" }}

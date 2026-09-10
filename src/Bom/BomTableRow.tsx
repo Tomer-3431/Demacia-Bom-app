@@ -1,6 +1,6 @@
 import type { RowData } from "../components/Table";
 
-export default interface TableRow extends RowData {
+export default interface BomTableRow extends RowData {
   avatar: string;
   name: string;
   catalogNumber: string;
