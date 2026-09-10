@@ -202,8 +202,7 @@ const flattenBomTree = (
     return result;
 };
 
-export const OnshapePage: FC = () => {
-    console.log("[Render] OnshapePage component rendering/re-rendering");
+const OnshapePage: FC = () => {
     const [searchParams] = useSearchParams();
 
     const context = useOnshapeContext();
@@ -213,7 +212,6 @@ export const OnshapePage: FC = () => {
 
     useOnshapeMessage(client, (message) => {
         if (isSaveChangesMessage(message)) {
-            console.log("[Onshape] Save changes requested by host.");
             client.finishedSaving(message.messageId);
         }
     });
@@ -999,3 +997,5 @@ export const OnshapePage: FC = () => {
         </div>
     );
 };
+
+export default OnshapePage;

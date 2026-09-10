@@ -1,7 +1,7 @@
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import './css/App.css';
 import MainLayout from './components/MainLayout';
-import { OnshapePage } from './pages/OnshapePage';
+import OnshapePage from './onshape/OnshapePage';
 import CreateBomPage from './pages/CreateBomPage';
 import CreatePartPage from './pages/CreatePartPage';
 import HomeScreen from './home/HomePage';
