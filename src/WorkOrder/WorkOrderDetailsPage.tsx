@@ -5,6 +5,7 @@ import Table from "../components/Table";
 import WorkOrderColumns from "./WorkOrderColumns";
 import type WorkOrderTableRow from "./WorkOrderTableRow";
 import type { PartModel, WorkorderModel } from "../util/Models";
+import WorkOrderDataUI from "./WorkOrderDataUI";
 
 export default function WorkOrderDetailsPage() {
     const { workOrderID } = useParams<{ workOrderID: string }>();
@@ -48,8 +49,8 @@ export default function WorkOrderDetailsPage() {
                     statusCode: p.statusCode || 0,
                     productionGCOwner: p.productionGCOwner || "",
                     productionMakingOwner: p.productionMakingOwner || "",
-                    lastUpadte: p.lastUpdate || new Date(),
-                    firstAdded: p.firstAdded || new Date(),
+                    lastUpadte: p.createdAt || new Date(),
+                    firstAdded: p.updatedAt || new Date(),
                     comments: part.comments || "",
                     documentID: part.onshapeID?.documentID || "",
                     wvmType: part.onshapeID?.wvmType || "",
@@ -74,6 +75,9 @@ export default function WorkOrderDetailsPage() {
 
     return (
         <div className="p-8">
+            {workOrderData && (
+                <WorkOrderDataUI workOrder={workOrderData} />
+            )}
             {error && (
                 <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
                     <p className="font-semibold">Error Loading Work Order Data</p>
@@ -89,7 +93,7 @@ export default function WorkOrderDetailsPage() {
                     data={rows}
                     columnsData={WorkOrderColumns}
                     newRowFunction={undefined}
-                    setData={(newData) => {return setRows(newData as WorkOrderTableRow[]);}}
+                    setData={(newData) => { return setRows(newData as WorkOrderTableRow[]); }}
                 />
             )}
         </div>
