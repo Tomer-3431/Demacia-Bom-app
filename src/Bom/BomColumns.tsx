@@ -25,7 +25,7 @@ const BomColumns: ColumnConfig[] = [
     key: "onshapeURL",
     label: "Links",
     type: "button",
-    buttonText: "Open CAD",
+    buttonText: "Open Onshape",
     isDisabled: () => true,
     onButtonClick: (row) => {
       if (row.onshapeURL) window.open(row.onshapeURL, "_blank");

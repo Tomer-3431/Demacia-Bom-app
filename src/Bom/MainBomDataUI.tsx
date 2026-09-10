@@ -33,8 +33,8 @@ const MainBomDataUI: React.FC<{ bom: BomModel }> = ({ bom }) => {
         statusCode: 0,
         productionGCOwner: "",
         productionMakingOwner: "",
-        lastUpdate: new Date(),
-        firstAdded: new Date(),
+        updatedAt: new Date(),
+        createdAt: new Date(),
       };
       collectedParts.push(workOrderPart);
     }
@@ -56,7 +56,8 @@ const MainBomDataUI: React.FC<{ bom: BomModel }> = ({ bom }) => {
       parts: parts,
       avatarID: bom.avatarID,
       comments: data.comments,
-      workOrderCreated: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     try {
@@ -126,20 +127,6 @@ const MainBomDataUI: React.FC<{ bom: BomModel }> = ({ bom }) => {
                 Engineer:{" "}
                 <span className="text-zinc-200 font-medium">
                   {bom.engineer || "N/A"}
-                </span>
-              </p>
-              <span>•</span>
-              <p>
-                Sub-Assemblies:{" "}
-                <span className="text-zinc-200 font-medium">
-                  {bom.subAssemblies?.length || 0}
-                </span>
-              </p>
-              <span>•</span>
-              <p>
-                Direct Parts:{" "}
-                <span className="text-zinc-200 font-medium">
-                  {bom.parts?.length || 0}
                 </span>
               </p>
             </div>
