@@ -1,4 +1,4 @@
-import { FileBox, HomeIcon, X, type LucideProps } from "lucide-react";
+import { FileBox, HomeIcon, Plus, X, type LucideProps } from "lucide-react";
 import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import { useLocation, useNavigate } from "react-router-dom"
 
@@ -9,6 +9,8 @@ export const Sidebar: React.FC<{ isOpen: boolean, onClose: () => void }> = ({ is
     const navItems: { label: string, path: string, icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>> }[] = [
         { label: 'Home', path: '/home', icon: HomeIcon },
         { label: 'Onshape', path: '/onshape', icon: FileBox },
+        { label: 'Create new bom', path: '/new-bom', icon: Plus },
+        { label: 'Create new part', path: '/new-part', icon: Plus },
     ];
 
     const handleNavigation = (path: string) => {

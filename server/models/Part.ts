@@ -27,6 +27,7 @@ const partSchema = new mongoose.Schema(
     productionType: { type: Number, ref: "ProductionType" },
 
     onshapeURL: { type: String },
+    avatarID: { type: String },
     stlLink: { type: String },
     parasolidLink: { type: String },
 

@@ -60,7 +60,7 @@ export async function getBomByID(
 ) {
     try {
         const id = req.params.id;
-        const bom = Bom.findOne({ id: id });
+        const bom = await Bom.findOne({ id: id });
         if (!bom)
             return res.status(404).json({ message: `Bom ${id} not found` });
         return res.status(200).json(bom);

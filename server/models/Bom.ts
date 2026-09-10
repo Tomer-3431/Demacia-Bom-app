@@ -43,6 +43,7 @@ const bomSchema = new mongoose.Schema(
     subAssemblies: { type: [subAseemblySchema], default: [] },
 
     onshapeURL: { type: String },
+    avatarID: { type: String },
 
     comments: { type: String },
     onshapeID: { type: onshapeIDSchema, required: false },
