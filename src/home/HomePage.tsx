@@ -39,7 +39,7 @@ export default function HomeScreen() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {boms.map((bom) => <BomCard bom={bom} />)}
+        {boms.map((bom) => <BomCard key={bom.id} bom={bom} />)}
       </div>
     </div>
   );
