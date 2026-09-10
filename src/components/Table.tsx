@@ -557,7 +557,7 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
                                                                 col.onButtonClick?.(row);
                                                             }}
                                                             disabled={!row[col.key]}
-                                                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                                                            className="mx-auto px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                                                         >
                                                             {col.buttonText || "Action"}
                                                         </button>
@@ -640,12 +640,11 @@ export const Table: React.FC<TableParam> = ({ data, columnsData, newRowFunction,
             )}
             {rowContextMenu.visible && activeContextMenuRow && (
                 <div className="context-menu" style={{ top: rowContextMenu.y, left: rowContextMenu.x }} onClick={(e) => e.stopPropagation()}>
-
                     {
-                    newRowFunction && (<div>
-                        <button onClick={() => handleAddRow(activeContextMenuRow.id)}>add item inside</button>
-                        <div className="context-divider" />
-                    </div>)
+                        newRowFunction && (<div>
+                            <button onClick={() => handleAddRow(activeContextMenuRow.id)}>add item inside</button>
+                            <div className="context-divider" />
+                        </div>)
                     }
                     <button onClick={handleDeleteRowClick} className="delete-btn">Delete Row</button>
                 </div>
