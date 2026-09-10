@@ -37,7 +37,7 @@ export default function HomeScreen() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-zinc-100">Bill of Materials</h1>
+      <h1 className="text-2xl font-bold mb-6 text-zinc-100">Boms</h1>
 
       {error && (
         <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
@@ -67,10 +67,10 @@ export default function HomeScreen() {
                     </div>
                     <h2 className="text-lg font-bold text-zinc-100">{bom.name || "Unnamed BOM"}</h2>
                     <p className="text-sm text-zinc-400 mt-1">
-                        Catalog: <span className="text-zinc-200">{bom.catalogNumber || "N/A"}</span>
+                        <span className="text-zinc-200">{bom.catalogNumber || "N/A"}</span>
                     </p>
                     <p className="text-sm text-zinc-400">
-                        Engineer: <span className="text-zinc-200">{bom.engineer || "N/A"}</span>
+                        <span className="text-zinc-200">{bom.engineer || "N/A"}</span>
                     </p>
                 </div>
             </div>
