@@ -8,8 +8,8 @@ const subPartSchema = new mongoose.Schema(
     statusCode: { type: Number, default: -1 },
     productionGCOwner: { type: String },
     productionMakingOwner: { type: String },
-    lastUpdate: { type: Date },
-    firstAdded: { type: Date },
+    updatedAt: { type: Date },
+    createdAt: { type: Date },
   },
   { _id: false },
 );
@@ -28,11 +28,10 @@ const workOrderSchema = new mongoose.Schema(
     avatarID: { type: String },
 
     comments: { type: String },
-    workOrderCreated: { type: Date },
   },
   { _id: false, timestamps: true },
 );
 
-const WorkOrder = mongoose.model('Work Order', workOrderSchema);
+const WorkOrder = mongoose.model("Work Order", workOrderSchema);
 
 export default WorkOrder;
