@@ -58,7 +58,7 @@ export async function checkConnection(req: Request, res: Response) {
 /** GET /api/onshape/part/d/:documentID/wvmT/:wvmType/wvmI/:wvmID/e/:elementID/p/:partID */
 export async function getPart(req: Request<OnshapePartParams>, res: Response) {
   try {
-    const part = await onshapeService.getPart(req.params);
+    const part = await onshapeService.getPartForDb(req.params);
     return res.status(200).json(part);
   } catch (err) {
     return handleOnshapeError(res, err, "Failed to fetch part from Onshape");
@@ -82,7 +82,7 @@ export async function updatePart(
 export async function getBom(req: Request<OnshapeBomParams>, res: Response) {
   try {
     const bom = await onshapeService.getBom(req.params);
-    return res.status(200).json(bom);
+    return res.status(200).json(bom["bomTable"]);
   } catch (err) {
     return handleOnshapeError(res, err, "Failed to fetch bom from Onshape");
   }
