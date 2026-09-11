@@ -39,7 +39,7 @@ export default function BomDetailsPage() {
 
       const assemblyRow: BomTableRow = {
         id: currentAssemblyRowId,
-        parentId: parentId,
+        parentId: parentId === bomId ? null : parentId,
         isExpanded: true,
         avatar: `/drive/file/id/${bom.avatarID}` || "",
         name: bom.name || targetBomId,

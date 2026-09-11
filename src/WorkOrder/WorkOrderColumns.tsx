@@ -3,14 +3,14 @@ import { downloadFile } from "../util/ApiService";
 import type WorkOrderTableRow from "./WorkOrderTableRow";
 
 const WorkOrderColumns: ColumnConfig[] = [
-    { key: "avatar", label: "Avatar", type: "image" },
-    { key: "name", label: "Name", type: "string" },
-    { key: "catalogNumber", label: "Catalog Number", type: "string" },
-    { key: "revision", label: "Revision", type: "string" },
-    { key: "description", label: "Description", type: "string" },
-    { key: "engineer", label: "Engineer", type: "string" },
-    { key: "material", label: "Material", type: "string" },
-    { key: "mass", label: "Mass", type: "number" },
+    { key: "avatar", label: "Avatar", type: "image", isDisabled: (row) => row.vendor !== "" },
+    { key: "name", label: "Name", type: "string", isDisabled: (row) => row.vendor !== "" },
+    { key: "catalogNumber", label: "Catalog Number", type: "string", isDisabled: (row) => row.vendor !== "" },
+    { key: "revision", label: "Revision", type: "string", isDisabled: (row) => row.vendor !== "" },
+    { key: "description", label: "Description", type: "string", isDisabled: (row) => row.vendor !== "" },
+    { key: "engineer", label: "Engineer", type: "string", isDisabled: (row) => row.vendor !== "" },
+    { key: "material", label: "Material", type: "string", isDisabled: (row) => row.vendor !== "" },
+    { key: "mass", label: "Mass", type: "number", isDisabled: () => true},
     { key: "price", label: "Price", type: "number" },
     { key: "quantityTotal", label: "Quantity Total", type: "number" },
     { key: "quantityMade", label: "Quantity Made", type: "number" },

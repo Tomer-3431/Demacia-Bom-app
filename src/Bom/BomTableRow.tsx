@@ -20,4 +20,5 @@ export default interface BomTableRow extends RowData {
   onshapeURL: string;
   exportSTL: string;
   exportParasolid: string;
+  vendor: string;
 }

@@ -26,4 +26,5 @@ export default interface WorkOrderTableRow extends RowData {
     onshapeURL: string;
     exportSTL: string;
     exportParasolid: string;
+    vendor: string;
 }

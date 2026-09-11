@@ -17,6 +17,7 @@ export interface BomModel {
   onshapeID?: OnshapeID & { bomID: string};
   parts: { partID: string; quantity: number }[];
   subAssemblies: { bomID: string; quantity: number }[];
+  vendor?: string;
   updatedAt?: Date;
   createdAt?: Date;
 }
@@ -37,6 +38,7 @@ export interface PartModel {
   stlLink?: string;
   parasolidLink?: string;
   onshapeID?: OnshapeID & { partID: string};
+  vendor?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

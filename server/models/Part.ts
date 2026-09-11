@@ -33,6 +33,7 @@ const partSchema = new mongoose.Schema(
 
     comments: { type: String },
     onshapeID: { type: onshapeIDSchema, required: false },
+    vendor: { type: String, },
   },
   { _id: false, timestamps: true },
 );

@@ -3,17 +3,17 @@ import { downloadFile } from "../util/ApiService";
 import type BomTableRow from "./BomTableRow";
 
 const BomColumns: ColumnConfig[] = [
-  { key: "avatar", label: "Avatar", type: "image" },
-  { key: "name", label: "Name", type: "string" },
-  { key: "description", label: "Description", type: "string" },
-  { key: "catalogNumber", label: "Catalog No.", type: "string" },
-  { key: "revision", label: "Revision", type: "string" },
-  { key: "engineer", label: "Engineer", type: "string" },
+  { key: "avatar", label: "Avatar", type: "image", isDisabled: (row) => row.vendor !== "" },
+  { key: "name", label: "Name", type: "string", isDisabled: (row) => row.vendor !== "" },
+  { key: "description", label: "Description", type: "string", isDisabled: (row) => row.vendor !== "" },
+  { key: "catalogNumber", label: "Catalog No.", type: "string", isDisabled: (row) => row.vendor !== "" },
+  { key: "revision", label: "Revision", type: "string", isDisabled: (row) => row.vendor !== "" },
+  { key: "engineer", label: "Engineer", type: "string", isDisabled: (row) => row.vendor !== "" },
   { key: "quantity", label: "Quantity", type: "number", isDisabled: () => true },
-  { key: "material", label: "Material", type: "string" },
-  { key: "mass", label: "Mass", type: "number" },
-  { key: "price", label: "Price", type: "number" },
-  { key: "comments", label: "Comments", type: "string" },
+  { key: "material", label: "Material", type: "string", isDisabled: (row) => row.vendor !== "" },
+  { key: "mass", label: "Mass", type: "number", isDisabled: (row) => row.vendor !== "" },
+  { key: "price", label: "Price", type: "number", isDisabled: (row) => row.vendor !== "" },
+  { key: "comments", label: "Comments", type: "string", isDisabled: (row) => row.vendor !== "" },
   // Onshape ID Columns (Disabled)
   // { key: "documentID", label: "Onshape Doc ID", type: "string", isDisabled: () => true },
   // { key: "wvmType", label: "WVM Type", type: "string", isDisabled: () => true },
@@ -40,7 +40,7 @@ const BomColumns: ColumnConfig[] = [
     isDisabled: () => true,
     onButtonClick: (row: BomTableRow) => {
       if (row.exportSTL) {
-        const downloadUrl = `http://localhost:5050/api/drive/file/${row.exportSTL}`;
+        const downloadUrl = `http://localhost:5050/api/drive/file/id/${row.exportSTL}`;
         downloadFile(downloadUrl, `${row.name || "part"}.stl`);
       }
     },
@@ -53,7 +53,7 @@ const BomColumns: ColumnConfig[] = [
     isDisabled: () => true,
     onButtonClick: (row: BomTableRow) => {
       if (row.exportParasolid) {
-        const downloadUrl = `http://localhost:5050/api/drive/file/${row.exportParasolid}`;
+        const downloadUrl = `http://localhost:5050/api/drive/file/id/${row.exportParasolid}`;
         downloadFile(downloadUrl, `${row.name || "part"}.parasolid`);
       }
     },
