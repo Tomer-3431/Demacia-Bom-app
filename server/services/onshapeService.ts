@@ -35,9 +35,11 @@
  * API Explorer (https://cad.onshape.com/glassworks/explorer/) if a call
  * starts returning 404s, since Onshape does bump these over time.
  */
-import 'dotenv/config';
+import "dotenv/config";
+import "dotenv";
 
-const ONSHAPE_BASE_URL = process.env.ONSHAPE_BASE_URL || 'https://cad.onshape.com/api';
+const ONSHAPE_BASE_URL =
+  process.env.ONSHAPE_BASE_URL || "https://cad.onshape.com/api";
 
 export interface OnshapePartRef {
   documentID: string;
@@ -64,15 +66,15 @@ export interface OnshapeBomRef {
  * form appears in some schema-management endpoints instead.
  */
 export type OnshapeValueType =
-  | 'STRING'
-  | 'BOOL'
-  | 'INT'
-  | 'DOUBLE'
-  | 'DATE'
-  | 'ENUM'
-  | 'OBJECT'
-  | 'BLOB'
-  | 'USER';
+  | "STRING"
+  | "BOOL"
+  | "INT"
+  | "DOUBLE"
+  | "DATE"
+  | "ENUM"
+  | "OBJECT"
+  | "BLOB"
+  | "USER";
 
 /**
  * Onshape metadata object type enum (what kind of thing a property
@@ -225,11 +227,20 @@ export interface OnshapeBillOfMaterials {
   [key: string]: unknown;
 }
 
+export interface OnshapeElementMetadata {
+  jsonType?: string;
+  elementId?: string;
+  elementType?: number;
+  mimeType?: string;
+  properties: OnshapeMetadataProperty[];
+  [key: string]: unknown;
+}
+
 /** Thrown when the caller asks for an Onshape operation that has no REST equivalent. */
 export class UnsupportedOnshapeOperationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'UnsupportedOnshapeOperationError';
+    this.name = "UnsupportedOnshapeOperationError";
   }
 }
 
@@ -240,7 +251,7 @@ export class OnshapeApiError extends Error {
 
   constructor(message: string, status: number, body: unknown) {
     super(message);
-    this.name = 'OnshapeApiError';
+    this.name = "OnshapeApiError";
     this.status = status;
     this.body = body;
   }
@@ -252,7 +263,7 @@ function getCredentials(): { accessKey: string; secretKey: string } {
 
   if (!accessKey || !secretKey) {
     throw new Error(
-      'ONSHAPE_ACCESS_KEY and ONSHAPE_SECRET_KEY must be set. Copy .env.example to .env and fill them in.'
+      "ONSHAPE_ACCESS_KEY and ONSHAPE_SECRET_KEY must be set. Copy .env.example to .env and fill them in.",
     );
   }
   return { accessKey, secretKey };
@@ -260,17 +271,17 @@ function getCredentials(): { accessKey: string; secretKey: string } {
 
 function authHeader(): string {
   const { accessKey, secretKey } = getCredentials();
-  const token = Buffer.from(`${accessKey}:${secretKey}`).toString('base64');
+  const token = Buffer.from(`${accessKey}:${secretKey}`).toString("base64");
   return `Basic ${token}`;
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'DELETE';
+  method?: "GET" | "POST" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
 }
 
-function buildUrl(path: string, query?: RequestOptions['query']): string {
+function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(`${ONSHAPE_BASE_URL}${path}`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -287,15 +298,18 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
  * Throws OnshapeApiError on any non-2xx response so controllers can
  * translate it to an appropriate HTTP status (see onshapeController.ts).
  */
-async function onshapeRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, query } = options;
+async function onshapeRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const { method = "GET", body, query } = options;
   const url = buildUrl(path, query);
 
   const response = await fetch(url, {
     method,
     headers: {
-      Accept: 'application/json;charset=UTF-8; qs=0.09',
-      'Content-Type': 'application/json;charset=UTF-8; qs=0.09',
+      Accept: "application/json;charset=UTF-8; qs=0.09",
+      "Content-Type": "application/json;charset=UTF-8; qs=0.09",
       Authorization: authHeader(),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -315,7 +329,7 @@ async function onshapeRequest<T>(path: string, options: RequestOptions = {}): Pr
     throw new OnshapeApiError(
       `Onshape API request failed: ${method} ${path} -> ${response.status}`,
       response.status,
-      parsed
+      parsed,
     );
   }
 
@@ -329,11 +343,82 @@ async function onshapeRequest<T>(path: string, options: RequestOptions = {}): Pr
  */
 async function checkConnection(): Promise<boolean> {
   try {
-    await onshapeRequest('/users/sessioninfo');
+    await onshapeRequest("/users/sessioninfo");
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Maps this app's PartModel field names to the Onshape metadata propertyId
+ * that field is sourced from/written to. These ids are specific to this
+ * document's BOM template/schema (Onshape propertyIds are per-document, not
+ * global) - confirmed against a real part metadata response.
+ *
+ * Fields intentionally NOT in this map are not backed by a writable Onshape
+ * metadata property, or aren't something a user edit should ever send:
+ *   - mass: COMPUTED by Onshape from geometry + material (computedProperty:
+ *     true in the real response) - not user-settable, so callers should
+ *     disable editing it entirely rather than including it in an update.
+ *   - id, quantity, onshapeURL, onshapeID, stlLink, parasolidLink, avatarID:
+ *     not Onshape metadata properties at all (ids/links/exports/Drive file
+ *     references), so there's nothing to map them to here.
+ */
+export const PART_PROPERTY_ID_MAP: Record<string, string> = {
+  name: "57f3fb8efa3416c06701d60d",
+  catalogNumber: "57f3fb8efa3416c06701d60f",
+  revision: "57f3fb8efa3416c06701d610",
+  description: "57f3fb8efa3416c06701d60e",
+  engineer: "57f3fb8efa3416c06701d619",
+  material: "57f3fb8efa3416c06701d615",
+  price: "6617a03ef812b159a51a8786",
+  comments: "66154a7f56997c7041994212",
+  vendor: "57f3fb8efa3416c06701d612",
+};
+
+/**
+ * Reads a raw Onshape metadata property's `value` into the plain type this
+ * app's PartModel field expects. Most properties are already the right
+ * shape (STRING valueType -> value is already a string), but a few have
+ * Onshape-specific nested object shapes that need to be flattened:
+ *   - material: value is an object ({ id, displayName, libraryName, ... })
+ *     mirroring Onshape's own Material Library schema - PartModel only
+ *     wants the display name (e.g. "ABS"), not the whole object.
+ */
+function readPropertyValue(fieldName: string, rawValue: unknown): unknown {
+  if (fieldName === "material") {
+    if (rawValue && typeof rawValue === "object") {
+      return (
+        (rawValue as { displayName?: string; id?: string }).displayName ?? ""
+      );
+    }
+    return typeof rawValue === "string" ? rawValue : "";
+  }
+  return rawValue ?? "";
+}
+
+/**
+ * Maps this app's PartModel field names to the values Onshape currently has
+ * for that part, reading through PART_PROPERTY_ID_MAP. Only returns the
+ * fields that exist in the map (name, catalogNumber, revision, description,
+ * engineer, material, price, comments) - callers merge this with whatever
+ * else PartModel needs (id, quantity, links, Drive file ids) themselves.
+ */
+function mapPartMetadataToModel(
+  metadata: OnshapePartMetadata,
+): Record<string, unknown> {
+  const byPropertyId = new Map(
+    metadata.properties.map((p) => [p.propertyId, p]),
+  );
+  const result: Record<string, unknown> = {};
+
+  for (const [fieldName, propertyId] of Object.entries(PART_PROPERTY_ID_MAP)) {
+    const property = byPropertyId.get(propertyId);
+    result[fieldName] = readPropertyValue(fieldName, property?.value);
+  }
+
+  return result;
 }
 
 /**
@@ -344,8 +429,24 @@ async function checkConnection(): Promise<boolean> {
 async function getPart(ref: OnshapePartRef): Promise<OnshapePartMetadata> {
   const { documentID, wvmType, wvmID, elementID, partID } = ref;
   return onshapeRequest<OnshapePartMetadata>(
-    `/metadata/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}`
+    `/metadata/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}`,
   );
+}
+
+/**
+ * Gets a part's metadata already mapped into this app's PartModel field
+ * names (name, catalogNumber, revision, description, engineer, material,
+ * price, comments), using PART_PROPERTY_ID_MAP rather than the raw Onshape
+ * properties array. This is the function to use when syncing a part INTO
+ * the database - getPart() above is the raw passthrough for anything that
+ * needs the full Onshape response instead (e.g. resolving other
+ * propertyIds not in the map, or reading validator/enum metadata).
+ */
+async function getPartForDb(
+  ref: OnshapePartRef,
+): Promise<Record<string, unknown>> {
+  const metadata = await getPart(ref);
+  return mapPartMetadataToModel(metadata);
 }
 
 /**
@@ -357,24 +458,113 @@ async function getPart(ref: OnshapePartRef): Promise<OnshapePartMetadata> {
  */
 async function updatePart(
   ref: OnshapePartRef,
-  data: { properties: Array<{ propertyId: string; value: unknown }> } | Record<string, unknown>
+  data:
+    | { properties: Array<{ propertyId: string; value: unknown }> }
+    | Record<string, unknown>,
 ): Promise<OnshapePartMetadata> {
   const { documentID, wvmType, wvmID, elementID, partID } = ref;
   const path = `/metadata/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}`;
 
   let properties: Array<{ propertyId: string; value: unknown }>;
 
-  if ('properties' in data && Array.isArray((data as { properties: unknown }).properties)) {
-    properties = (data as { properties: Array<{ propertyId: string; value: unknown }> }).properties;
+  if (
+    "properties" in data &&
+    Array.isArray((data as { properties: unknown }).properties)
+  ) {
+    properties = (
+      data as { properties: Array<{ propertyId: string; value: unknown }> }
+    ).properties;
   } else {
-    // Resolve friendly property names (e.g. "Description") to propertyIds
-    // by reading current metadata first, matching the workflow documented
-    // at https://onshape-public.github.io/docs/api-adv/metadata/
-    const current = await getPart(ref);
+    properties = Object.entries(data as Record<string, unknown>)
+      .map(([fieldName, value]) => {
+        const propertyId = PART_PROPERTY_ID_MAP[fieldName];
+        if (!propertyId) return null;
+        // material is read from an object but Onshape material assignment
+        // isn't writable through the plain-value update path (see the
+        // forum-confirmed caveat in the file header) - skip it rather than
+        // send a string where Onshape expects its own material schema.
+        if (fieldName === 'material') return null;
+        return { propertyId, value };
+      })
+      .filter((p): p is { propertyId: string; value: unknown } => p !== null);
+
+    if (properties.length === 0) {
+      throw new Error(
+        `None of the provided fields have a known Onshape propertyId mapping: ${Object.keys(
+          data as Record<string, unknown>,
+        ).join(", ")}. See PART_PROPERTY_ID_MAPחל`,
+      );
+    }
+  }
+
+  return onshapeRequest<OnshapePartMetadata>(path, {
+    method: "POST",
+    body: { jsonType: "metadata-part", partId: partID, properties },
+  });
+}
+
+/**
+ * Gets an assembly's own element metadata (name, description, and any
+ * other custom properties configured on the element itself). An assembly
+ * is just an element in Onshape's model, so this is the same Metadata
+ * endpoint used for any element/tab — there is no assembly- or
+ * BOM-specific metadata endpoint.
+ * Endpoint: GET v10/metadata/d/{did}/{wvmType}/{wvmID}/e/{eid}
+ */
+async function getAssembly(
+  ref: OnshapeBomRef,
+): Promise<OnshapeElementMetadata> {
+  const { documentID, wvmType, wvmID, elementID } = ref;
+  return onshapeRequest<OnshapeElementMetadata>(
+    `/metadata/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}`,
+  );
+}
+
+/**
+ * Updates an assembly's own element metadata properties (e.g. its tab
+ * name, description). Accepts either the raw Onshape request shape
+ * ({ properties: [{ propertyId, value }] }) or a flat
+ * { [propertyName]: value } map resolved against the element's current
+ * metadata (so callers don't have to know propertyIds up front) — same
+ * two-shape convention as updatePart().
+ *
+ * IMPORTANT — this updates the ASSEMBLY ELEMENT, not the BOM: Onshape has
+ * no endpoint to write BOM table data directly (see the file header). A
+ * BOM's displayed "Name"/"Description" columns for a sub-assembly row are
+ * generally sourced from that sub-assembly's own element metadata, so
+ * updating it here is the correct way to change what the BOM shows for it
+ * — but true BOM-table-only columns (ones with no backing element
+ * property) can't be written this way and will simply not match any
+ * property name below.
+ * Endpoint: POST v10/metadata/d/{did}/{wvmType}/{wvmID}/e/{eid}
+ */
+async function updateAssembly(
+  ref: OnshapeBomRef,
+  data:
+    | { properties: Array<{ propertyId: string; value: unknown }> }
+    | Record<string, unknown>,
+): Promise<OnshapeElementMetadata> {
+  const { documentID, wvmType, wvmID, elementID } = ref;
+  const path = `/metadata/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}`;
+
+  let properties: Array<{ propertyId: string; value: unknown }>;
+
+  if (
+    "properties" in data &&
+    Array.isArray((data as { properties: unknown }).properties)
+  ) {
+    properties = (
+      data as { properties: Array<{ propertyId: string; value: unknown }> }
+    ).properties;
+  } else {
+    // Resolve friendly property names (e.g. "Name", "Description") to
+    // propertyIds by reading current metadata first, matching the workflow
+    // documented at https://onshape-public.github.io/docs/api-adv/metadata/
+    const current = await getAssembly(ref);
     properties = Object.entries(data as Record<string, unknown>)
       .map(([name, value]) => {
         const match = current.properties.find(
-          (p) => p.name?.toLowerCase() === name.toLowerCase()
+          (p) => p.name?.toLowerCase() === name.toLowerCase(),
         );
         return match ? { propertyId: match.propertyId, value } : null;
       })
@@ -382,16 +572,16 @@ async function updatePart(
 
     if (properties.length === 0) {
       throw new Error(
-        `None of the provided property names matched this part's metadata properties: ${Object.keys(
-          data as Record<string, unknown>
-        ).join(', ')}`
+        `None of the provided property names matched this assembly's metadata properties: ${Object.keys(
+          data as Record<string, unknown>,
+        ).join(", ")}`,
       );
     }
   }
 
-  return onshapeRequest<OnshapePartMetadata>(path, {
-    method: 'POST',
-    body: { jsonType: 'metadata-part', partId: partID, properties },
+  return onshapeRequest<OnshapeElementMetadata>(path, {
+    method: "POST",
+    body: { properties },
   });
 }
 
@@ -404,14 +594,13 @@ async function updatePart(
  */
 async function getBom(
   ref: OnshapeBomRef,
-  options: { multiLevel?: boolean; indented?: boolean } = {}
+  options: { multiLevel?: boolean; indented?: boolean } = {},
 ): Promise<OnshapeBillOfMaterials> {
   const { documentID, wvmType, wvmID, elementID } = ref;
-  const { multiLevel = true, indented = false } = options;
 
   return onshapeRequest<OnshapeBillOfMaterials>(
     `/assemblies/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/bom`,
-    { query: { multiLevel, indented, generateIfAbsent: true } }
+    { query: { multiLevel: true, indented: true } },
   );
 }
 
@@ -432,9 +621,9 @@ async function getBom(
  */
 async function onshapeRequestBuffer(
   path: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
 ): Promise<Buffer> {
-  const { method = 'GET', body, query } = options;
+  const { method = "GET", body, query } = options;
   let url = buildUrl(path, query);
 
   // Cap redirect hops as a safety net against loops.
@@ -442,23 +631,25 @@ async function onshapeRequestBuffer(
     const response = await fetch(url, {
       method,
       headers: {
-        Accept: '*/*',
-        ...(body !== undefined ? { 'Content-Type': 'application/json;charset=UTF-8' } : {}),
+        Accept: "*/*",
+        ...(body !== undefined
+          ? { "Content-Type": "application/json;charset=UTF-8" }
+          : {}),
         Authorization: authHeader(),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      redirect: 'manual',
+      redirect: "manual",
     });
 
     // Manually follow redirects (307/302/etc.) so we can re-send the
     // Authorization header, which fetch would otherwise drop.
     if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location');
+      const location = response.headers.get("location");
       if (!location) {
         throw new OnshapeApiError(
           `Onshape API binary request redirected without a Location header: ${method} ${path} -> ${response.status}`,
           response.status,
-          undefined
+          undefined,
         );
       }
       url = new URL(location, url).toString();
@@ -474,7 +665,7 @@ async function onshapeRequestBuffer(
       throw new OnshapeApiError(
         `Onshape API binary request failed: ${method} ${path} -> ${response.status}`,
         response.status,
-        parsed
+        parsed,
       );
     }
 
@@ -485,7 +676,7 @@ async function onshapeRequestBuffer(
   throw new OnshapeApiError(
     `Onshape API binary request exceeded max redirects: ${method} ${path}`,
     310,
-    undefined
+    undefined,
   );
 }
 
@@ -532,11 +723,11 @@ function getImageDimensions(buffer: Buffer): { width: number; height: number } {
  */
 async function getElementThumbnail(
   ref: OnshapeBomRef,
-  size: string = '300x300'
+  size: string = "300x300",
 ): Promise<Buffer> {
   const { documentID, wvmType, wvmID, elementID } = ref;
   return onshapeRequestBuffer(
-    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/s/${size}`
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/s/${size}`,
   );
 }
 
@@ -547,11 +738,11 @@ async function getElementThumbnail(
  */
 async function getPartThumbnail(
   ref: OnshapePartRef,
-  size: string = '300x300'
+  size: string = "300x300",
 ): Promise<Buffer> {
   const { documentID, wvmType, wvmID, elementID, partID } = ref;
   return onshapeRequestBuffer(
-    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}/s/${size}`
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}/s/${size}`,
   );
 }
 
@@ -563,22 +754,25 @@ async function getPartThumbnail(
 async function setElementThumbnail(
   ref: OnshapeBomRef,
   imageBuffer: Buffer,
-  mimeType: string = 'image/png'
+  mimeType: string = "image/png",
 ): Promise<void> {
   const { documentID, wvmID, wvmType, elementID } = ref;
   const { width, height } = getImageDimensions(imageBuffer);
-  const base64Image = imageBuffer.toString('base64');
+  const base64Image = imageBuffer.toString("base64");
 
-  await onshapeRequest(`/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}`, {
-    method: 'POST',
-    body: {
-      base64EncodedImage: base64Image,
-      mimeType,
-      size: `${width}x${height}`,
-      imageWidth: width,
-      imageHeight: height,
+  await onshapeRequest(
+    `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}`,
+    {
+      method: "POST",
+      body: {
+        base64EncodedImage: base64Image,
+        mimeType,
+        size: `${width}x${height}`,
+        imageWidth: width,
+        imageHeight: height,
+      },
     },
-  });
+  );
 }
 
 /**
@@ -589,16 +783,16 @@ async function setElementThumbnail(
 async function setPartThumbnail(
   ref: OnshapePartRef,
   imageBuffer: Buffer,
-  mimeType: string = 'image/png'
+  mimeType: string = "image/png",
 ): Promise<void> {
   const { documentID, wvmID, wvmType, elementID, partID } = ref;
   const { width, height } = getImageDimensions(imageBuffer);
-  const base64Image = imageBuffer.toString('base64');
+  const base64Image = imageBuffer.toString("base64");
 
   await onshapeRequest(
     `/thumbnails/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/p/${partID}`,
     {
-      method: 'POST',
+      method: "POST",
       body: {
         base64EncodedImage: base64Image,
         mimeType,
@@ -606,7 +800,7 @@ async function setPartThumbnail(
         imageWidth: width,
         imageHeight: height,
       },
-    }
+    },
   );
 }
 
@@ -616,14 +810,14 @@ async function setPartThumbnail(
  */
 async function exportPartToStl(
   ref: OnshapePartRef,
-  options: { units?: string; mode?: 'ascii' | 'binary' } = {}
+  options: { units?: string; mode?: "ascii" | "binary" } = {},
 ): Promise<Buffer> {
   const { documentID, wvmType, wvmID, elementID, partID } = ref;
-  const { units = 'meter', mode = 'binary' } = options;
+  const { units = "meter", mode = "binary" } = options;
 
   return onshapeRequestBuffer(
     `/parts/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/partid/${partID}/stl`,
-    { query: { units, mode } }
+    { query: { units, mode } },
   );
 }
 
@@ -633,13 +827,13 @@ async function exportPartToStl(
  */
 async function exportPartToParasolid(
   ref: OnshapePartRef,
-  options: { version?: number } = {}
+  options: { version?: number } = {},
 ): Promise<Buffer> {
   const { documentID, wvmType, wvmID, elementID, partID } = ref;
 
   return onshapeRequestBuffer(
     `/parts/d/${documentID}/${wvmType}/${wvmID}/e/${elementID}/partid/${partID}/parasolid`,
-    { query: options }
+    { query: options },
   );
 }
 
@@ -651,30 +845,32 @@ async function exportPartToParasolid(
 async function exportPartToSolidworks(ref: OnshapePartRef): Promise<Buffer> {
   const { documentID, wvmType, wvmID, elementID, partID } = ref;
 
-  const translation = await onshapeRequest<{ id: string; requestState: string }>(
-    `/translations/d/${documentID}/${wvmType}/${wvmID}`,
-    {
-      method: 'POST',
-      body: {
-        formatName: 'SOLIDWORKS',
-        elementId: elementID,
-        partIds: partID,
-        storeInDocument: false,
-      },
-    }
-  );
+  const translation = await onshapeRequest<{
+    id: string;
+    requestState: string;
+  }>(`/translations/d/${documentID}/${wvmType}/${wvmID}`, {
+    method: "POST",
+    body: {
+      formatName: "SOLIDWORKS",
+      elementId: elementID,
+      partIds: partID,
+      storeInDocument: false,
+    },
+  });
 
   let state = translation.requestState;
   const translationId = translation.id;
 
-  while (state === 'ACTIVE' || state === 'PENDING') {
+  while (state === "ACTIVE" || state === "PENDING") {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const status = await onshapeRequest<{ requestState: string }>(
-      `/translations/${translationId}`
+      `/translations/${translationId}`,
     );
     state = status.requestState;
-    if (state === 'FAILED') {
-      throw new Error(`Onshape SolidWorks translation failed for part ${partID}`);
+    if (state === "FAILED") {
+      throw new Error(
+        `Onshape SolidWorks translation failed for part ${partID}`,
+      );
     }
   }
 
@@ -684,8 +880,11 @@ async function exportPartToSolidworks(ref: OnshapePartRef): Promise<Buffer> {
 export default {
   checkConnection,
   getPart,
+  getPartForDb,
   updatePart,
   getBom,
+  getAssembly,
+  updateAssembly,
   getElementThumbnail,
   getPartThumbnail,
   setElementThumbnail,
@@ -693,5 +892,4 @@ export default {
   exportPartToStl,
   exportPartToParasolid,
   exportPartToSolidworks,
-
 };
