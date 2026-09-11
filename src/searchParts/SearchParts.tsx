@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { AuthenticatedImage, fetchFromApi } from "../util/ApiService";
 import type { PartModel } from "../util/Models";
 import { createPortal } from "react-dom";
-import PartPortal from "./partPortal";
+import PartPortal from "./PartPortal";
 
 export function PartsSearchPage() {
     const [searchQuery, setSearchQuery] = useState("");
