@@ -54,10 +54,7 @@ export async function getPartByID(
   try {
     const id = req.params.id;
     const part = await Part.findOne({ id: id });
-    if (!part)
-      return res
-        .status(404)
-        .json({ message: `Part ${id} not found` });
+    if (!part) return res.status(404).json({ message: `Part ${id} not found` });
     return res.status(200).json(part);
   } catch (err) {
     return next(err);
