@@ -1,0 +1,177 @@
+/**
+ * AssemblyBomPage.css
+ * =============================================================================
+ * Small, focused stylesheet for AssemblyBomPage.tsx and PublishBomModal.tsx.
+ * Written to sit comfortably alongside a dark, zinc-toned Tailwind UI (the
+ * rest of the app uses zinc-9xx backgrounds / zinc-200 text / blue-600
+ * accents) without requiring Tailwind config changes - plain CSS custom
+ * properties instead, so it drops in regardless of how Tailwind is set up.
+ */
+
+.assembly-bom-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.assembly-bom-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  letter-spacing: -0.01em;
+}
+
+.assembly-bom-subtitle {
+  margin-top: 4px;
+  color: #a1a1aa;
+  font-size: 0.925rem;
+  max-width: 60ch;
+}
+
+.assembly-bom-unpublished-hint {
+  margin-top: 8px;
+  color: #fbbf24;
+  font-size: 0.85rem;
+}
+
+/* ---- Publish modal ---------------------------------------------------- */
+
+.publish-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 9, 11, 0.72);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.publish-modal {
+  width: 100%;
+  max-width: 480px;
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 28px;
+  animation: publish-modal-in 140ms ease-out;
+}
+
+@keyframes publish-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.publish-modal-header h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #e4e4e7;
+}
+
+.publish-modal-header p {
+  margin-top: 6px;
+  color: #a1a1aa;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.publish-modal-form {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.publish-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.publish-field span {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #d4d4d8;
+}
+
+.publish-field input,
+.publish-field textarea {
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: #e4e4e7;
+  font-size: 0.9rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 120ms ease;
+}
+
+.publish-field input:focus,
+.publish-field textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.publish-field input:disabled,
+.publish-field textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.publish-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.publish-btn-primary,
+.publish-btn-secondary {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, opacity 120ms ease;
+  border: 1px solid transparent;
+}
+
+.publish-btn-primary {
+  background: #2563eb;
+  color: white;
+}
+
+.publish-btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.publish-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.publish-btn-secondary {
+  background: transparent;
+  border-color: #3f3f46;
+  color: #d4d4d8;
+}
+
+.publish-btn-secondary:hover:not(:disabled) {
+  background: #27272a;
+}
+
+.publish-btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
