@@ -111,7 +111,6 @@ export function upsertPartById(id: string, data: Partial<PartModel>): Promise<Pa
 export async function getOnshapeBom(key: OnshapeKey): Promise<OnshapeBomTable> {
   // The response IS the table (no bomTable wrapper) - see OnshapeBom.tsx.
   const response = await fetchFromApi<OnshapeBomTable>(`/onshape/bom${onshapeKeySegment(key)}`);
-  console.log(response);
   return response;
 }
 

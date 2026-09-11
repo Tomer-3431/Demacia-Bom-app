@@ -60,6 +60,7 @@ export default function BomDetailsPage() {
         onshapeURL: bom.onshapeURL || "",
         exportSTL: "",
         exportParasolid: "",
+        vendor: bom.vendor || "",
       };
 
       const collectedRows: BomTableRow[] = targetBomId === bomId ? [] : [assemblyRow];
@@ -94,6 +95,7 @@ export default function BomDetailsPage() {
           onshapeURL: part.onshapeURL || "",
           exportSTL: part.stlLink || "",
           exportParasolid: part.parasolidLink || "",
+          vendor: part.vendor || ""
         };
         collectedRows.push(partRow);
       }

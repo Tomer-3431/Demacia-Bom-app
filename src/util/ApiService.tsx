@@ -132,8 +132,6 @@ export function AuthenticatedImage({ src, alt, className, ...props }: Authentica
           blob = new Blob([arrayBuffer], { type: mimeType  });
         }
 
-        console.info(blob);
-
         objectUrl = URL.createObjectURL(blob);
         setImageSrc(objectUrl);
         setError(false);

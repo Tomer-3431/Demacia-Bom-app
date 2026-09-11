@@ -1,17 +1,14 @@
-import { useNavigate } from "react-router-dom";
 import type { WorkorderModel } from "../util/Models";
 import { AuthenticatedImage } from "../util/ApiService";
 
 const WorkOrderDataUI: React.FC<{ workOrder: WorkorderModel }> = ({ workOrder }) => {
-    const navigate = useNavigate();
-
     return (
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl text-zinc-100 flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
         <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center w-full lg:w-auto">
           <div className="w-28 h-28 shrink-0 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
             {workOrder.avatarID ? (
               <AuthenticatedImage
-                src={`http://localhost:5050/api/drive/file/${workOrder.avatarID}`}
+                src={`/drive/file/id/${workOrder.avatarID}`}
                 alt={workOrder.name || "Work Order Thumbnail"}
                 className="w-full h-full object-cover"
               />

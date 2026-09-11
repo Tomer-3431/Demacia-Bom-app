@@ -45,7 +45,6 @@ const MainBomDataUI: React.FC<{ bom: BomModel }> = ({ bom }) => {
     const secret: string = import.meta.env.VITE_CLIENT_SECRET;
     const id = Date.now().toString();
     const parts = await fetchBomPartsRecursively(bom.id);
-    console.log(parts);
 
     const payload: WorkorderModel = {
       id: id,

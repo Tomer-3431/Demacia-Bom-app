@@ -23,7 +23,7 @@ export default function WorkOrderDetailsPage() {
             getWOData();
         }
     }, [workOrderID])
-
+    
     useEffect(() => {
         if (!workOrderID || !workOrderData) return;
 
@@ -35,7 +35,7 @@ export default function WorkOrderDetailsPage() {
                     id: `${workOrderID}-part-${p.partID}`,
                     parentId: null,
                     isExpanded: false,
-                    avatar: part.avatarID || "",
+                    avatar: `/drive/file/id/${part.avatarID}` || "",
                     name: part.name || "",
                     catalogNumber: part.catalogNumber || "",
                     revision: part.revision || "",
@@ -59,7 +59,8 @@ export default function WorkOrderDetailsPage() {
                     entityID: part.onshapeID?.partID || "",
                     onshapeURL: part.onshapeURL || "",
                     exportSTL: part.stlLink || "",
-                    exportParasolid: part.parasolidLink || ""
+                    exportParasolid: part.parasolidLink || "",
+                    vendor: part.vendor || ""
                 };
                 collectedRows.push(partRow);
             }

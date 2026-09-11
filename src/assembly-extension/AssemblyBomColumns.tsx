@@ -88,7 +88,6 @@ export default function buildAssemblyBomColumns({ onAddToDb, rootIsPublished }: 
       key: "dbAction",
       label: "Database",
       type: "button",
-      isDisabled: (row) => row.vendor !== "",
       buttonText: rootIsPublished ? "Add to DB" : "Publish assembly first",
       onButtonClick: (row: AssemblyBomRow) => onAddToDb(row),
     },

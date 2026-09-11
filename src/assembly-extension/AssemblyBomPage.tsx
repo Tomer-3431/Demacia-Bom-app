@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Table from "../components/Table";
-import type { ApiError } from "../util/ApiService";
+import { fetchFromApi, type ApiError } from "../util/ApiService";
 import type { BomModel, PartModel } from "../util/Models";
 import { useOnshapeClient, useOnshapeContext } from "../util/OnshapeExtension";
 import "../css/AssemblyBomPage.css";
@@ -20,8 +20,6 @@ import type AssemblyBomRow from "./AssemblyBomRow";
 import { parseOnshapeBomTable, type OnshapeBomTable, type ParsedOnshapeBomRow } from "./OnshapeBom";
 import buildAssemblyBomColumns from "./AssemblyBomColumns";
 import PublishBomModal, { type PublishBomFormValues } from "./PublishBomModel";
-import type { PublishItemFormValues } from "./PublishItemModel";
-import PublishItemModal from "./PublishItemModel";
 
 /** Onshape sends "w" or "v" for the workspaceOrVersion flag; our db/onshape
  *  routes want the same single-letter wvmType. */
@@ -62,8 +60,6 @@ export default function AssemblyBomPage() {
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [itemToPublish, setItemToPublish] = useState<AssemblyBomRow | null>(null);
-  const [publishingItem, setPublishingItem] = useState(false);
 
   const wvm = resolveWvm(context);
   const rootKey: OnshapeKey | null =
@@ -78,7 +74,7 @@ export default function AssemblyBomPage() {
    * DB data wins when present; Onshape data fills the gaps otherwise.
    */
   const resolveBomNode = useCallback(
-    async (key: OnshapeKey, parentRowId: string | null): Promise<{ node: ResolvedNode; dbBom: BomModel | null }> => {
+    async (key: OnshapeKey, parentRowId: string | null, rootBom: BomModel | null | 'root'): Promise<{ node: ResolvedNode; dbBom: BomModel | null }> => {
       const onshapeBom = await getOnshapeBom(key);
       if (import.meta.env.DEV && !Array.isArray(onshapeBom?.items)) {
         // eslint-disable-next-line no-console
@@ -95,9 +91,25 @@ export default function AssemblyBomPage() {
       } catch {
         dbBom = null;
       }
-
-      const isPublished = Boolean(dbBom);
       const rowId = `${key.documentID}_${key.wvmType}_${key.wvmID}_${key.elementID}_${bomID}`;
+
+      // const isPublished = (Boolean(dbBom) && rootIsPublished && rootBomDB && (
+      //   parentRowId
+      //     ? await (async () => {
+      //       const bom = await fetchFromApi<BomModel>(`/db/bom/id/${parentRowId}`);
+      //       return bom.subAssemblies.find((c) => c.bomID === rowId);
+      //     })() :
+      //     Boolean(rootBomDB.subAssemblies.find((c) => c.bomID === rowId))
+      // )) || key === rootKey;
+      const isPublished = Boolean(dbBom);
+      const isExist = isPublished && rootBom !== 'root' && rootBom !== null && (
+        parentRowId
+          ? await (async () => {
+            const bom = await fetchFromApi<BomModel>(`/db/bom/id/${parentRowId}`);
+            return bom.subAssemblies.find((c) => c.bomID === rowId);
+          })() :
+          Boolean(rootBom.subAssemblies.find((c) => c.bomID === rowId))
+      );
       const onshapeUrl = buildOnshapeElementURL(context.server, key);
 
       const row: AssemblyBomRow = {
@@ -125,7 +137,7 @@ export default function AssemblyBomPage() {
         onshapeURL: dbBom?.onshapeURL || onshapeUrl,
         exportSTL: "",
         exportParasolid: "",
-        dbAction: isPublished ? "" : "add",
+        dbAction: isExist ? "" : "add",
         vendor: dbBom?.vendor || onshapeBom.bomSource?.element?.vendor || "",
       };
 
@@ -135,7 +147,7 @@ export default function AssemblyBomPage() {
   );
 
   const resolvePartRow = useCallback(
-    async (parsedItem: ParsedOnshapeBomRow, parentRowId: string | null): Promise<AssemblyBomRow> => {
+    async (parsedItem: ParsedOnshapeBomRow, parentRowId: string | null, rootBom: BomModel | null): Promise<AssemblyBomRow> => {
       const key: OnshapeKey = {
         documentID: parsedItem.itemSource.documentId,
         wvmType: parsedItem.itemSource.wvmType,
@@ -154,12 +166,21 @@ export default function AssemblyBomPage() {
       } catch {
         dbPart = null;
       }
+      const rowId = `${key.documentID}_${key.wvmType}_${key.wvmID}_${key.elementID}_${partID}`;
 
-      const isPublished = Boolean(dbPart);
+      const isPublished = Boolean(dbPart)
+      const isExist = isPublished && rootBom !== null && (
+        parentRowId
+          ? await (async () => {
+            const bom = await fetchFromApi<BomModel>(`/db/bom/id/${parentRowId}`);
+            return bom.parts.find((c) => c.partID === rowId);
+          })() :
+          Boolean(rootBom.parts.find((c) => c.partID === rowId))
+      );
       const onshapeUrl = buildOnshapeElementURL(context.server, key);
 
       return {
-        id: `${key.documentID}_${key.wvmType}_${key.wvmID}_${key.elementID}_${partID}`,
+        id: rowId,
         parentId: parentRowId,
         isExpanded: false,
         source: isPublished ? "db" : "onshape-only",
@@ -183,7 +204,7 @@ export default function AssemblyBomPage() {
         onshapeURL: dbPart?.onshapeURL || onshapeUrl,
         exportSTL: dbPart?.stlLink || "",
         exportParasolid: dbPart?.parasolidLink || "",
-        dbAction: isPublished ? "" : "add",
+        dbAction: isExist ? "" : "add",
         vendor: dbPart?.vendor || parsedItem.vendor || "",
       };
     },
@@ -200,7 +221,7 @@ export default function AssemblyBomPage() {
     const allRows: AssemblyBomRow[] = [];
 
     try {
-      const { node: rootNode, dbBom } = await resolveBomNode(rootKey, null);
+      const { node: rootNode, dbBom } = await resolveBomNode(rootKey, null, 'root');
       setRootBomDB(dbBom);
       setRootIsPublished(Boolean(dbBom));
       setRootOnshapeBom(rootNode.onshapeBom ?? null);
@@ -224,11 +245,11 @@ export default function AssemblyBomPage() {
             if (visitedBomIds.has(subKeyId)) continue;
             visitedBomIds.add(subKeyId);
 
-            const { node: subNode } = await resolveBomNode(subKey, childParentId);
+            const { node: subNode } = await resolveBomNode(subKey, childParentId, dbBom);
             allRows.push(subNode.row);
             await expand(subNode, false);
           } else {
-            const partRow = await resolvePartRow(item, childParentId);
+            const partRow = await resolvePartRow(item, childParentId, dbBom);
             allRows.push(partRow);
           }
         }
@@ -241,7 +262,7 @@ export default function AssemblyBomPage() {
     } finally {
       setLoading(false);
     }
-  }, [rootKey, resolveBomNode, resolvePartRow]);
+  }, [rootKey, resolveBomNode, resolvePartRow, rootBomDB]);
 
   useEffect(() => {
     loadTree();
@@ -259,18 +280,121 @@ export default function AssemblyBomPage() {
             );
             return;
           }
-          // if (row.isAssembly) {
-          //   client.showMessageBubble(
-          //     `Add "${row.name}" to the database from its own BOM tab, or publish the top-level assembly to include it.`
-          //   );
-          // } else {
-          //   client.showMessageBubble(
-          //     `"${row.name}" isn't in the database yet. Publish the top-level assembly to add it.`
-          //   );
-          // }
+          return handlePublishItem(row);
         },
       }),
     [client, rootIsPublished]
+  );
+
+  const handlePublishItem = useCallback(
+    async (row: AssemblyBomRow) => {
+      const key: OnshapeKey = {
+        documentID: row.documentID,
+        wvmType: row.wvmType,
+        wvmID: row.wvmID,
+        elementID: row.elementID,
+      };
+
+      if (!rootBomDB || !rootKey) return;
+
+      try {
+        if (row.isAssembly) {
+          const children = rows.filter((r) => r.parentId === row.id);
+          const parts = children
+            .filter((c) => !c.isAssembly)
+            .map((c) => ({ partID: c.id, quantity: c.quantity || 1 }));
+          const subAssemblies = children
+            .filter((c) => c.isAssembly)
+            .map((c) => ({ bomID: c.id, quantity: c.quantity || 1 }));
+
+          const bomAvatarId = await syncBomThumbnailToDrive(key, row.name);
+
+          await upsertBomById(row.id, {
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            catalogNumber: row.catalogNumber,
+            comments: row.comments,
+            engineer: row.vendor === "" ? row.engineer : row.vendor,
+            parts: parts,
+            subAssemblies: subAssemblies,
+            onshapeURL: `https://cad.onshape.com/documents/${key.documentID}/${key.wvmType}/${key.wvmID}/e/${key.elementID}`,
+            avatarID: bomAvatarId || "",
+            onshapeID: {
+              ...key,
+              bomID: row.entityID,
+            },
+            vendor: row.vendor,
+          });
+        } else {
+          const { avatarID, stlLink, parasolidLink } = await syncPartFilesToDrive(
+            key,
+            row.entityID,
+            row.name
+          );
+
+          await upsertPartById(row.id, {
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            catalogNumber: row.catalogNumber,
+            revision: row.revision,
+            material: row.material,
+            mass: row.mass,
+            price: row.price,
+            comments: row.comments,
+            engineer: row.vendor === "" ? row.engineer : row.vendor,
+            ...(avatarID ? { avatarID } : {}),
+            ...(stlLink ? { stlLink } : {}),
+            ...(parasolidLink ? { parasolidLink } : {}),
+            onshapeURL: `https://cad.onshape.com/documents/${key.documentID}/${key.wvmType}/${key.wvmID}/e/${key.elementID}`,
+            onshapeID: {
+              ...key,
+              partID: row.entityID,
+            },
+            vendor: row.vendor,
+          });
+        }
+
+        if (row.parentId !== null) {
+          if (row.isAssembly) {
+            const children = await fetchFromApi<BomModel>(`/db/bom/id/${row.parentId}`);
+            if (children.subAssemblies.length === 0) return;
+            await upsertBomById(row.parentId, {
+              subAssemblies: [...children.subAssemblies, { bomID: row.id, quantity: row.quantity || 1 }]
+            });
+          } else {
+            const children = await fetchFromApi<BomModel>(`/db/bom/id/${row.parentId}`);
+            if (children.parts.length === 0) return;
+            await upsertBomById(row.parentId, {
+              parts: [...children.parts, { partID: row.id, quantity: row.quantity || 1 }]
+            });
+          }
+        } else {
+          const rootID = rootBomDB?.id || `${rootKey.documentID}_${rootKey.wvmType}_${rootKey.wvmID}_${rootKey.elementID}_${rootOnshapeBom?.id}` || "wrong id";
+          if (row.isAssembly) {
+            const children = await fetchFromApi<BomModel>(`/db/bom/id/${rootID}`);
+            if (children.subAssemblies.length === 0) return;
+            await upsertBomById(rootID, {
+              subAssemblies: [...children.subAssemblies, { bomID: row.id, quantity: row.quantity || 1 }]
+            });
+          } else {
+            const children = await fetchFromApi<BomModel>(`/db/bom/id/${rootID}`);
+            if (children.parts.length === 0) return;
+            await upsertBomById(rootID, {
+              parts: [...children.parts, { partID: row.id, quantity: row.quantity || 1 }]
+            });
+          }
+        }
+
+        client.showMessageBubble(`"${row.name}" was published to the database.`);
+        await loadTree();
+      } catch (err) {
+        const apiErr = err as ApiError;
+        client.showMessageBubble(`Publish failed: ${apiErr.message}`);
+      }
+    },
+    [rows, client, loadTree]
   );
 
   const handleTableEdit = useCallback(
@@ -458,7 +582,7 @@ export default function AssemblyBomPage() {
               description: row.description,
               catalogNumber: row.catalogNumber,
               comments: row.comments,
-              engineer: row.vendor !== "" ? engineer : row.vendor,
+              engineer: row.vendor === "" ? engineer : row.vendor,
               parts: links.parts,
               subAssemblies: links.subAssemblies,
               onshapeURL: `https://cad.onshape.com/documents/${key.documentID}/${key.wvmType}/${key.wvmID}/e/${key.elementID}`,
@@ -485,7 +609,7 @@ export default function AssemblyBomPage() {
               mass: row.mass,
               price: row.price,
               comments: row.comments,
-              engineer: row.vendor !== "" ? engineer : row.vendor,
+              engineer: row.vendor === "" ? engineer : row.vendor,
               ...(avatarID ? { avatarID } : {}),
               ...(stlLink ? { stlLink } : {}),
               ...(parasolidLink ? { parasolidLink } : {}),
