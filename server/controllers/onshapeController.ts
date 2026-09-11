@@ -88,6 +88,23 @@ export async function getBom(req: Request<OnshapeBomParams>, res: Response) {
   }
 }
 
+export async function updateBom(
+  req: Request<
+    OnshapeBomParams, 
+    unknown, 
+    { 
+      properties: Array<{ propertyId: string; value: unknown }> 
+    } | Record<string, unknown>>,
+  res: Response
+) {
+  try {
+    const assembly = await onshapeService.updateAssembly(req.params, req.body)
+    return res.status(200).json(assembly);
+  } catch (err) {
+    return handleOnshapeError(res, err, "Failed to update assembly in Onshape");
+  }
+}
+
 export async function getPartThumbnail(
   req: Request<OnshapePartParams & { size?: string }>,
   res: Response,
