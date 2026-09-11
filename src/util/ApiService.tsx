@@ -158,3 +158,47 @@ export function AuthenticatedImage({ src, alt, className, ...props }: Authentica
 
   return <img src={imageSrc} alt={alt} className={className} {...props} />;
 }
+
+/**
+ * Fetches raw file bytes from the backend using the client secret header
+ * and returns them as a Blob - the shared decoding core behind both
+ * downloadFile() and AuthenticatedImage below.
+ *
+ * Handles both raw binary responses and JSON-wrapped Buffer responses
+ * ({ type: "Buffer", data: number[] }), which is how Express sends back a
+ * Node Buffer when it's accidentally (or unavoidably) JSON-serialized
+ * instead of streamed as a binary body.
+ */
+export async function fetchFileBytes(url: string, mimeType?: string): Promise<Blob> {
+  const secret = import.meta.env.VITE_CLIENT_SECRET;
+  if (!secret) {
+    throw new Error("VITE_CLIENT_SECRET is missing from environment variables.");
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      "x-client-secret": secret,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const firstBytes = new Uint8Array(arrayBuffer.slice(0, 16));
+
+  // Check if response is a JSON-wrapped Buffer: { type: "Buffer", data: number[] }
+  const looksLikeJson = firstBytes.length > 0 && firstBytes[0] === 0x7b; // '{'
+
+  if (looksLikeJson) {
+    const text = new TextDecoder().decode(arrayBuffer);
+    const json: { type: "Buffer"; data: number[] } = JSON.parse(text);
+    const bytes = new Uint8Array(json.data);
+    return new Blob([bytes], { type: mimeType ?? "application/octet-stream" });
+  }
+
+  const responseContentType =
+    response.headers.get("content-type") ?? "application/octet-stream";
+  return new Blob([arrayBuffer], { type: mimeType ?? responseContentType });
+}
