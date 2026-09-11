@@ -56,7 +56,7 @@ export async function getFileFromId(
 export async function uploadFile(
   client: GoogleDriveService,
   req: Request<
-    { fileName: string; mimeType: string; folderID?: string },
+    { fileName: string; mimeType: string},
     unknown,
     Buffer
   >,
@@ -85,8 +85,7 @@ export async function uploadFile(
     const file = await client.uploadFile({
       buffer: safeBuffer,
       fileName: req.params.fileName,
-      mimeType: req.params.mimeType,
-      folderId: req.params.folderID,
+      mimeType: req.params.mimeType
     });
     return res.status(201).json(file);
   } catch (err) {

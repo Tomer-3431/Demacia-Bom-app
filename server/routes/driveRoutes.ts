@@ -27,7 +27,7 @@ router.get(
     await driveController.getFileFromId(drive, req, res, next),
 );
 router.post(
-  "/file/name/:fileName/mime/:mimeType/folder/:folderID",
+  "/file/name/:fileName/mime/:mimeType",
   express.raw({ type: "*/*", limit: "50mb" }),
   async (req, res, next) =>
     await driveController.uploadFile(drive, req, res, next),
