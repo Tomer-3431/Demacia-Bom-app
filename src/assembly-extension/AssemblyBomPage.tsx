@@ -76,13 +76,6 @@ export default function AssemblyBomPage() {
   const resolveBomNode = useCallback(
     async (key: OnshapeKey, parentRowId: string | null, rootBom: BomModel | null | 'root'): Promise<{ node: ResolvedNode; dbBom: BomModel | null }> => {
       const onshapeBom = await getOnshapeBom(key);
-      if (import.meta.env.DEV && !Array.isArray(onshapeBom?.items)) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[AssemblyBomPage] /onshape/bom response has no items[] array - check the server proxy's response shape:",
-          onshapeBom
-        );
-      }
       const bomID = onshapeBom.id || key.elementID;
 
       let dbBom: BomModel | null = null;

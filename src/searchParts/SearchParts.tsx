@@ -86,7 +86,7 @@ export function PartsSearchPage() {
                                 <div className="w-16 h-16 shrink-0 bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden flex items-center justify-center">
                                     {part.avatarID ? (
                                         <AuthenticatedImage
-                                            src={`http://localhost:5050/api/drive/file/${part.avatarID}`}
+                                            src={`/drive/file/id/${part.avatarID}`}
                                             alt={part.name}
                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                                         />

@@ -56,7 +56,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                     <div className="w-24 h-24 shrink-0 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
                         {formData.avatarID ? (
                             <AuthenticatedImage
-                                src={`http://localhost:5050/api/drive/file/${formData.avatarID}`}
+                                src={`/drive/file/id/${formData.avatarID}`}
                                 alt={formData.name || "Part Avatar"}
                                 className="w-full h-full object-cover"
                             />
@@ -75,6 +75,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                                 name="name"
                                 value={formData.name || ""}
                                 onChange={handleChange}
+                                disabled={part.vendor !== ""}
                                 placeholder="Enter Part Name"
                                 className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-lg font-bold text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                             />
@@ -100,6 +101,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                             type="text"
                             name="catalogNumber"
                             value={formData.catalogNumber || ""}
+                            disabled={part.vendor !== ""}
                             onChange={handleChange}
                             placeholder="e.g. PN-1002"
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -114,6 +116,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                             type="text"
                             name="revision"
                             value={formData.revision || ""}
+                            disabled={part.vendor !== ""}
                             onChange={handleChange}
                             placeholder="e.g. Rev A"
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -128,6 +131,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                             type="text"
                             name="engineer"
                             value={formData.engineer || ""}
+                            disabled={part.vendor !== ""}
                             onChange={handleChange}
                             placeholder="Engineer name"
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -145,6 +149,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                             type="text"
                             name="material"
                             value={formData.material || ""}
+                            disabled={part.vendor !== ""}
                             onChange={handleChange}
                             placeholder="e.g. Aluminum 6061"
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -160,6 +165,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                             step="any"
                             name="mass"
                             value={formData.mass ?? ""}
+                            disabled={part.vendor !== ""}
                             onChange={handleChange}
                             placeholder="0.00"
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -175,6 +181,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                             step="any"
                             name="price"
                             value={formData.price ?? ""}
+                            disabled={part.vendor !== ""}
                             onChange={handleChange}
                             placeholder="0.00"
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -192,7 +199,6 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                             onClick={() => {
                                 if (part.onshapeURL) window.open(part.onshapeURL, "_blank");
                             }}
-                            disabled
                             className="mx-auto px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             Open Onshape
@@ -208,7 +214,6 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                                 const downloadUrl = `http://localhost:5050/api/drive/file/${part.stlLink}`;
                                 await downloadFile(downloadUrl, `${part.name || "part"}.stl`);
                             }}
-                            disabled
                             className="mx-auto px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             Download STL
@@ -224,7 +229,6 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                                 const downloadUrl = `http://localhost:5050/api/drive/file/${part.parasolidLink}`;
                                 await downloadFile(downloadUrl, `${part.name || "part"}.parasolid`);
                             }}
-                            disabled
                             className="mx-auto px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             Download Parasolid
@@ -242,6 +246,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                         rows={3}
                         value={formData.description || ""}
                         onChange={handleChange}
+                        disabled={part.vendor !== ""}
                         placeholder="Detailed description of the part..."
                         className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-y"
                     />
@@ -257,6 +262,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                         rows={4}
                         value={formData.comments || ""}
                         onChange={handleChange}
+                        disabled={part.vendor !== ""}
                         placeholder="Additional manufacturing notes, comments, or issues..."
                         className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-300 italic placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-y"
                     />
