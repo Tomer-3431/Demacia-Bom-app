@@ -16,11 +16,13 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchFromApi<BomSummary[]>("/db/bom/all")
       .then((data) => {
-        const sorted = data.sort((a, b) => {
-          const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-          const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-          return timeB - timeA;
-        });
+        const sorted = data
+          .filter((bom) => !bom.vendor || bom.vendor.trim() === "")
+          .sort((a, b) => {
+            const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+            const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+            return timeB - timeA;
+          });
         setBoms(sorted);
       })
       .catch((err: ApiError) => setError(err))
