@@ -8,6 +8,7 @@ import HomeScreen from './home/HomePage';
 import BomDetailsPage from './Bom/BomDetailsPage';
 import WorkOrderDetailsPage from './WorkOrder/WorkOrderDetailsPage';
 import PartsSearchPage from './searchParts/SearchParts';
+import AssemblyBomPage from './assembly-extension/AssemblyBomPage';
 
 export default function App() {
   return (
@@ -16,7 +17,8 @@ export default function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<HomeScreen />} />
           <Route path="/home" element={<HomeScreen />} />
-          <Route path="/onshape" element={<OnshapePage />} />
+          {/* <Route path="/onshape" element={<OnshapePage />} /> */}
+          <Route path="/onshape" element={<AssemblyBomPage />} />
           <Route path="/new-bom" element={<CreateBomPage />} />
           <Route path="/new-part" element={<CreatePartPage />} />
           <Route path="/bom/:bomId" element={<BomDetailsPage />} />
