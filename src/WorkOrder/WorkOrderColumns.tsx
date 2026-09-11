@@ -44,7 +44,7 @@ const WorkOrderColumns: ColumnConfig[] = [
         isDisabled: () => true,
         onButtonClick: (row: WorkOrderTableRow) => {
             if (row.exportSTL) {
-                const downloadUrl = `http://localhost:5050/api/drive/file/${row.exportSTL}`;
+                const downloadUrl = `${import.meta.env.VITE_CLIENT_URL}/api/drive/file/${row.exportSTL}`;
                 downloadFile(downloadUrl, `${row.name || "part"}.stl`);
             }
         },
@@ -57,7 +57,7 @@ const WorkOrderColumns: ColumnConfig[] = [
         isDisabled: () => true,
         onButtonClick: (row: WorkOrderTableRow) => {
             if (row.exportParasolid) {
-                const downloadUrl = `http://localhost:5050/api/drive/file/${row.exportParasolid}`;
+                const downloadUrl = `${import.meta.env.VITE_CLIENT_URL}/api/drive/file/${row.exportParasolid}`;
                 downloadFile(downloadUrl, `${row.name || "part"}.parasolid`);
             }
         },

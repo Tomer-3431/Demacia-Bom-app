@@ -60,7 +60,7 @@ const MainBomDataUI: React.FC<{ bom: BomModel }> = ({ bom }) => {
     };
 
     try {
-      const response = await fetch(`http://localhost:5050/api/db/workOrder/id/${id}`, {
+      const response = await fetch(`${import.meta.env.VITE_CLIENT_URL}/api/db/workOrder/id/${id}`, {
         method: "POST",
         headers: {
           "content-Type": "application/json",
@@ -93,7 +93,7 @@ const MainBomDataUI: React.FC<{ bom: BomModel }> = ({ bom }) => {
           <div className="w-28 h-28 shrink-0 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
             {bom.avatarID ? (
               <AuthenticatedImage
-                src={`http://localhost:5050/api/drive/file/${bom.avatarID}`}
+                src={`${import.meta.env.VITE_CLIENT_URL}/api/drive/file/${bom.avatarID}`}
                 alt={bom.name || "BOM Thumbnail"}
                 className="w-full h-full object-cover"
               />

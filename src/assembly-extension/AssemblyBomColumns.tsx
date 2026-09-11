@@ -60,7 +60,7 @@ export default function buildAssemblyBomColumns({ onAddToDb, rootIsPublished }: 
       isDisabled: (row) => row.vendor !== "",
       onButtonClick: (row: AssemblyBomRow) => {
         if (row.exportSTL) {
-          const downloadUrl = `http://localhost:5050/api/drive/file/id/${row.exportSTL}`;
+          const downloadUrl = `${import.meta.env.VITE_CLIENT_URL}/api/drive/file/id/${row.exportSTL}`;
           downloadFile(downloadUrl, `${row.name || "part"}.stl`);
         }
       },
@@ -73,7 +73,7 @@ export default function buildAssemblyBomColumns({ onAddToDb, rootIsPublished }: 
       isDisabled: (row) => row.vendor !== "",
       onButtonClick: (row: AssemblyBomRow) => {
         if (row.exportParasolid) {
-          const downloadUrl = `http://localhost:5050/api/drive/file/id/${row.exportParasolid}`;
+          const downloadUrl = `${import.meta.env.VITE_CLIENT_URL}/api/drive/file/id/${row.exportParasolid}`;
           downloadFile(downloadUrl, `${row.name || "part"}.parasolid`);
         }
       },

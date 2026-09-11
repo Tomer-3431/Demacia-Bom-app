@@ -27,7 +27,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
         setSaveError(null);
 
         try {
-            const response = await fetch(`http://localhost:5050/api/db/part/id/${part.id}`, {
+            const response = await fetch(`${import.meta.env.VITE_CLIENT_URL}/api/db/part/id/${part.id}`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -211,7 +211,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                         </label>
                         <button
                             onClick={async () => {
-                                const downloadUrl = `http://localhost:5050/api/drive/file/${part.stlLink}`;
+                                const downloadUrl = `${import.meta.env.VITE_CLIENT_URL}/api/drive/file/${part.stlLink}`;
                                 await downloadFile(downloadUrl, `${part.name || "part"}.stl`);
                             }}
                             className="mx-auto px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
@@ -226,7 +226,7 @@ const PartPortal: React.FC<{ part: PartModel }> = ({ part }) => {
                         </label>
                         <button
                             onClick={async () => {
-                                const downloadUrl = `http://localhost:5050/api/drive/file/${part.parasolidLink}`;
+                                const downloadUrl = `${import.meta.env.VITE_CLIENT_URL}/api/drive/file/${part.parasolidLink}`;
                                 await downloadFile(downloadUrl, `${part.name || "part"}.parasolid`);
                             }}
                             className="mx-auto px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
