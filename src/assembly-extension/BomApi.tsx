@@ -16,7 +16,7 @@ import { fetchFileBytes, fetchFromApi, type ApiError } from "../util/ApiService"
 import type { BomModel, PartModel } from "../util/Models";
 import type { OnshapeBomTable } from "./OnshapeBom";
 
-const BASE_URL = "http://localhost:5050/api";
+const BASE_URL = `${import.meta.env.VITE_CLIENT_URL}/api`;
 
 export async function postToApi<T>(endpoint: string, body: unknown): Promise<T> {
   const secret = import.meta.env.VITE_CLIENT_SECRET;
