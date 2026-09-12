@@ -99,13 +99,21 @@ interface AuthenticatedImageProps extends React.ImgHTMLAttributes<HTMLImageEleme
   src: string;
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
 export function AuthenticatedImage({ src, alt, className, ...props }: AuthenticatedImageProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [error, setError] = useState<boolean>(false);
-  const mimeType = 'image/png';
 
   useEffect(() => {
-    let objectUrl: string | null = null;
+    let isMounted = true;
     const secret = import.meta.env.VITE_CLIENT_SECRET;
 
     if (!src) return;
@@ -121,27 +129,42 @@ export function AuthenticatedImage({ src, alt, className, ...props }: Authentica
         const firstBytes = new Uint8Array(arrayBuffer.slice(0, 16));
         const looksLikeJson = firstBytes.length > 0 && firstBytes[0] === 0x7b; // '{'
 
-        let blob: Blob;
+        // let blob: Blob;
+        let base64String;
+        let mime = "image/png";
+
         if (looksLikeJson) {
           // JSON-wrapped Buffer response: { type: "Buffer", data: number[] }
           const text = new TextDecoder().decode(arrayBuffer);
-          const json: { type: 'Buffer'; data: number[] } = JSON.parse(text);
-          const bytes = new Uint8Array(json.data);
-          blob = new Blob([bytes], { type: mimeType  });
+          const json = JSON.parse(text);
+          if (json.type === "Buffer" && Array.isArray(json.data)) {
+            const bytes = new Uint8Array(json.data);
+            base64String = bytesToBase64(bytes);
+          } else {
+            throw new Error(json.message || "Invalid image format");
+          }
         } else {
-          blob = new Blob([arrayBuffer], { type: mimeType  });
+          const responseContentType = res.headers.get("content=type");
+          if (responseContentType && responseContentType.includes("image")) {
+            mime = responseContentType;
+          }
+          const bytes = new Uint8Array(arrayBuffer);
+          base64String = bytesToBase64(bytes);
         }
 
-        objectUrl = URL.createObjectURL(blob);
-        setImageSrc(objectUrl);
-        setError(false);
+        if (isMounted) {
+          setImageSrc(`data:${mime};base64,${base64String}`);
+          setError(false);
+        }
       } catch (err) {
-        setError(true);
+        if (isMounted) setError(true);
       } 
     };
 
+    getPicture();
+
     return () => {
-      getPicture();
+      isMounted = false;
     };
   }, [src])
 
