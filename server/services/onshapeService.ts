@@ -36,7 +36,6 @@
  * starts returning 404s, since Onshape does bump these over time.
  */
 import "dotenv/config";
-import "dotenv";
 
 const ONSHAPE_BASE_URL =
   process.env.ONSHAPE_BASE_URL || "https://cad.onshape.com/api";
