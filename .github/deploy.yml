@@ -1,0 +1,38 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - Deployment
+    
+premissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-Node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and Deploy
+        env:
+          VITE_CLIENT_SECRET: ${{ secrets.VITE_CLIENT_SECRET }}
+          VITE_CLIENT_URL: ${{ secrets.VITE_CLIENT_URL }}
+          VITE_ONSHAPE_API_ACCESS_KEY: ${{ secets.VITE_ONSHAPE_API_ACCESS_KEY }}
+          VITE_ONSHAPE_API_CREDENTIALS: ${{ secets.VITE_ONSHAPE_API_CREDENTIALS }}
+          VITE_ONSHAPE_API_SECRET_KEY: ${{ secets.VITE_ONSHAPE_API_SECRET_KEY }}
+          VITE_ONSHAPE_OAUTH_IDENTIFIER_KEY: ${{ secets.VITE_ONSHAPE_OAUTH_IDENTIFIER_KEY }}
+          VITE_ONSHAPE_OAUTH_SECRET_KEY: ${{ secets.VITE_ONSHAPE_OAUTH_SECRET_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run deploy
